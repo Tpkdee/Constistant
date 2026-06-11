@@ -1,0 +1,197 @@
+/* Shared styles for standalone pages (BOQ Summary, Material Catalog)
+   Reuses the same design tokens / class names as contistant.html (.fp-*, .ov-*, .rh-*, .modal-*)
+   so these pages feel consistent with the main app shell. */
+
+:root {
+  --color-primary: hsl(218, 75%, 50%);
+  --color-primary-pressed: hsl(218, 75%, 42%);
+  --color-primary-active: hsl(218, 75%, 35%);
+  --color-on-primary: #ffffff;
+
+  --color-panel-header: hsl(200, 8%, 11%);
+  --color-canvas-light: hsl(200, 8%, 98%);
+  --color-border-default: hsl(200, 8%, 88%);
+  --color-surface-row: hsl(200, 5%, 96%);
+  --color-text-primary: hsl(200, 8%, 12%);
+  --color-text-secondary: hsl(200, 8%, 40%);
+  --color-text-disabled: hsl(200, 8%, 65%);
+  --color-text-on-dark: #ffffff;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Sarabun', sans-serif;
+  color: var(--color-text-primary);
+  background: var(--color-canvas-light);
+}
+
+.mc-mono, .ov-num, td.ov-num, .ov-kpi-value {
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+}
+
+/* ─── Top bar ─── */
+.pg-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: var(--color-panel-header);
+  color: var(--color-text-on-dark);
+}
+.pg-topbar__brand { font-weight: 800; font-size: 16px; letter-spacing: 0.02em; }
+.pg-topbar__brand a { color: var(--color-text-on-dark); text-decoration: none; }
+.pg-topbar__nav { display: flex; gap: 16px; }
+.pg-topbar__nav a {
+  color: rgba(255,255,255,0.75);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.pg-topbar__nav a:hover, .pg-topbar__nav a.active { color: #fff; background: rgba(255,255,255,0.08); }
+
+.pg-content {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px 24px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ─── fp-* (shared with contistant.html feature panels) ─── */
+.fp-header h1 { font-size: 24px; margin: 0 0 6px; }
+.fp-header p { color: var(--color-text-secondary); margin: 0 0 12px; font-size: 14px; }
+.fp-summary { display: flex; gap: 8px; flex-wrap: wrap; }
+.fp-pill { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.fp-card { background: #fff; border: 1px solid var(--color-border-default); border-radius: 10px; padding: 16px 18px; }
+.fp-card h2 { font-size: 15px; margin: 0 0 12px; }
+.fp-form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.fp-card label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--color-text-secondary); font-weight: 600; margin-bottom: 12px; }
+.fp-card input, .fp-card select, .fp-card textarea {
+  font-family: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--color-border-default); border-radius: 6px; color: var(--color-text-primary);
+}
+.fp-card textarea { min-height: 56px; resize: vertical; }
+.fp-btn-primary {
+  background: var(--color-primary); color: var(--color-on-primary); border: none; border-radius: 8px;
+  padding: 10px 18px; font-weight: 700; font-size: 13px; cursor: pointer;
+}
+.fp-btn-primary:hover { background: var(--color-primary-pressed); }
+.fp-btn-secondary {
+  background: transparent; color: var(--color-text-primary); border: 1px solid var(--color-border-default); border-radius: 8px;
+  padding: 10px 18px; font-weight: 600; font-size: 13px; cursor: pointer;
+}
+.fp-btn-secondary:hover { background: var(--color-border-default); }
+.fp-empty { color: var(--color-text-disabled); font-size: 13px; text-align: center; padding: 24px; }
+
+/* ─── modal ─── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 1000;
+}
+.modal-card {
+  background: #fff; color: var(--color-text-primary); border-radius: 10px;
+  padding: 20px 24px; width: 560px; max-width: 92vw; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+}
+.modal-card h2 { margin: 0 0 14px; font-size: 16px; }
+.modal-card label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--color-text-secondary); font-weight: 600; margin-bottom: 12px; }
+.modal-card input, .modal-card select, .modal-card textarea {
+  font-family: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--color-border-default); border-radius: 6px; color: var(--color-text-primary);
+}
+.modal-card textarea { min-height: 56px; resize: vertical; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+
+/* ─── rh-table / ov-table ─── */
+.rh-table, .ov-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rh-table th, .rh-table td, .ov-table th, .ov-table td {
+  padding: 8px 10px; border-bottom: 1px solid var(--color-border-default); text-align: left;
+}
+.rh-table th, .ov-table th { font-size: 11px; text-transform: uppercase; color: var(--color-text-secondary); letter-spacing: 0.5px; }
+.rh-table td.rh-num, .ov-table td.ov-num { text-align: right; font-variant-numeric: tabular-nums; }
+.rh-delete { border: none; background: none; color: var(--color-text-disabled); cursor: pointer; }
+.rh-delete:hover { color: #ef4444; }
+.rh-total-row td { font-weight: 700; border-top: 2px solid var(--color-border-default); }
+.ov-conf-badge { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+
+/* ─── KPI grid (Overview-style) ─── */
+.ov-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.ov-kpi-card { background: #fff; border: 1px solid var(--color-border-default); border-radius: 10px; padding: 14px 16px; }
+.ov-kpi-label { font-size: 12px; color: var(--color-text-secondary); font-weight: 600; margin-bottom: 6px; }
+.ov-kpi-value { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* ─── BOQ Summary specific ─── */
+.boq-project-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.boq-project-info { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.boq-label { color: var(--color-text-secondary); font-weight: 600; margin-right: 6px; }
+.boq-no-price { color: #d97706; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.boq-source-tag { font-size: 10px; color: var(--color-text-secondary); }
+.boq-group { margin-bottom: 18px; }
+.boq-group:last-child { margin-bottom: 0; }
+.boq-group-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 2px solid var(--color-border-default); margin-bottom: 8px;
+}
+.boq-group-head h3 { margin: 0; font-size: 15px; }
+.boq-subgroup { margin: 10px 0 16px 12px; }
+.boq-subgroup-head { font-size: 13px; font-weight: 700; color: var(--color-text-secondary); margin-bottom: 6px; }
+.boq-export-controls .mc-toolbar-actions { flex-wrap: wrap; }
+
+/* ─── Material Catalog specific ─── */
+.mc-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--color-border-default); }
+.mc-tab {
+  background: none; border: none; cursor: pointer; padding: 10px 16px;
+  font-size: 13px; font-weight: 700; color: var(--color-text-secondary);
+  border-bottom: 2px solid transparent; font-family: inherit;
+}
+.mc-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+.mc-tab:hover { color: var(--color-text-primary); }
+
+.mc-layout { display: grid; grid-template-columns: 240px 1fr; gap: 16px; align-items: start; }
+.mc-sidebar { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 16px; }
+.mc-filter-group { display: flex; flex-direction: column; gap: 6px; }
+.mc-filter-label { font-size: 12px; color: var(--color-text-secondary); font-weight: 700; }
+.mc-checkbox { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.mc-sidebar select, .mc-sidebar input[type="text"] {
+  font-family: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid var(--color-border-default); border-radius: 6px;
+}
+
+.mc-table-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.mc-toolbar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.mc-table { font-size: 12px; }
+.mc-inline-input {
+  font-family: 'IBM Plex Mono', 'JetBrains Mono', monospace; font-size: 12px; padding: 4px 6px;
+  border: 1px solid var(--color-border-default); border-radius: 4px; width: 100%; max-width: 120px;
+}
+.mc-actions { display: flex; gap: 6px; white-space: nowrap; }
+
+.mc-catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.mc-catalog-card { display: flex; flex-direction: column; gap: 6px; }
+.mc-catalog-icon { font-size: 32px; }
+.mc-catalog-card h3 { margin: 0; font-size: 15px; }
+.mc-catalog-provider { margin: 0; font-size: 12px; font-weight: 700; color: var(--color-primary); }
+.mc-catalog-desc { margin: 0; font-size: 12px; color: var(--color-text-secondary); flex-grow: 1; }
+.mc-catalog-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--color-text-disabled); margin-bottom: 4px; }
+
+.mc-csv-modal { width: 720px; }
+.mc-csv-preview-wrap { max-height: 320px; overflow: auto; margin-bottom: 12px; }
+.mc-chart-wrap { margin-bottom: 16px; }
+.mc-chart-wrap canvas { max-height: 260px; }
+
+@media (max-width: 900px) {
+  .ov-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .mc-layout { grid-template-columns: 1fr; }
+  .mc-sidebar { position: static; }
+}
+
+/* ─── Print stylesheet (Export as PDF) ─── */
+@media print {
+  .pg-topbar, .boq-export-controls, .mc-tabs, .mc-sidebar, .mc-toolbar-actions { display: none !important; }
+  .pg-content { max-width: 100%; padding: 0; }
+  .fp-card { border: none; box-shadow: none; padding: 0; margin-bottom: 12px; }
+  body { background: #fff; }
+}
