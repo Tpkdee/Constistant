@@ -1,5 +1,5 @@
-// supabase.example.js
-// copy ไฟล์นี้ แล้ว rename เป็น supabase.js แล้วใส่ key จริง
+// config/supabase.example.js
+// Copy this file to supabase.js at the repo root, then add your real keys.
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
 

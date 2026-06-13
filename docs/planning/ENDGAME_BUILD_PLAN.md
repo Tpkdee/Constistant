@@ -1,7 +1,7 @@
 # CONSTISTANT — Endgame Build Plan
 
 Status: build plan, written against the working tree as of 2026-06-13 (post shell-refactor, **uncommitted**).
-Relationship to existing docs: this document **adopts** `ARCHITECTURE_ONBOARDING_WIZARD.md` (referenced below as **AOW**, by deliverable/section, e.g. AOW D1 §1.3) as the detailed spec for the wizard, extended schema, and timeline engine. Where this plan corrects or extends AOW, the correction is marked **⚠ DELTA**. Do not re-derive what AOW already specifies — go read the cited section.
+Relationship to existing docs: this document **adopts** [ARCHITECTURE_ONBOARDING_WIZARD.md](../architecture/ARCHITECTURE_ONBOARDING_WIZARD.md) (referenced below as **AOW**, by deliverable/section, e.g. AOW D1 §1.3) as the detailed spec for the wizard, extended schema, and timeline engine. Where this plan corrects or extends AOW, the correction is marked **⚠ DELTA**. Do not re-derive what AOW already specifies — go read the cited section.
 
 **Step 0 (before anything else): commit the current working tree.** The shell refactor + Resource Hub rewrite (~1,100 net new lines across 8 modified + 2 new directories) is the foundation every item below builds on, and it exists only as uncommitted changes. One bad `git checkout` loses a week.
 

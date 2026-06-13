@@ -14,7 +14,7 @@ async function qt_mountPanel() {
   const mount = document.getElementById('qt-module');
   if (!mount || mount.dataset.mounted === '1') return;
   try {
-    const url = new URL('./quantitake-panel.html', import.meta.url);
+    const url = new URL('../../templates/drawing/quantitake-panel.html', import.meta.url);
     mount.innerHTML = await (await fetch(url)).text();
     mount.dataset.mounted = '1';
   } catch (e) {

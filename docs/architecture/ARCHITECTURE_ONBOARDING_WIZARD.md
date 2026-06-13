@@ -1,12 +1,12 @@
 # Constistant — Onboarding Wizard & Cross-Engine Architecture
 
-Status: implementation-ready architecture decisions. Written against the codebase as of 2026-06-12 (post shell-refactor: `js/shell/`, `css/`, `pages/`, `js/overview/`, `js/drawing/quantitake-panel.html` + `drawing-calc.js`).
+Status: implementation-ready architecture decisions. Written against the codebase as of 2026-06-12 (post shell-refactor: `js/shell/`, `css/`, `pages/`, `js/overview/`, `templates/drawing/quantitake-panel.html` + `drawing-calc.js`).
 
 Conventions used throughout this document:
 - New wizard module prefix: **`wz_`** (matches `qt_`/`rc_`/`pl_`/`rh_` pattern — exported functions + `window.wz_*`).
 - New CSS follows `.fp-*` convention (feature-panel), file `css/wizard.css`.
 - All new localStorage entities are project-scoped via `projectStorageKey()` from `project-store.js`, except `PROVINCIAL_WEATHER` / `WORK_TYPE_HIERARCHY` / `EARLY_ESTIMATE_RATES` which are static lookup tables exported as constants from `schema.js` (no storage key needed — same pattern as existing `PRODUCTIVITY_RATES`, `REBAR_GRADES`, etc.).
-- Every new localStorage entity has a matching Supabase table sketch (snake_case, `project_id` FK, RLS by `user_id` via `projects` join — matches existing pattern in STEEL_CALC_TEAM_GUIDE.md).
+- Every new localStorage entity has a matching Supabase table sketch (snake_case, `project_id` FK, RLS by `user_id` via `projects` join — matches existing pattern in [STEEL_CALC_TEAM_GUIDE.md](../team/STEEL_CALC_TEAM_GUIDE.md)).
 
 ---
 

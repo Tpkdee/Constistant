@@ -4,7 +4,7 @@
 // DEMO_MATERIAL_PRICES below, so the page is fully usable without login.
 // Logged-in mode: reads/writes Supabase `material_prices` (RLS scoped to auth.uid()).
 //
-// ห้ามสร้างชื่อ field ใหม่สำหรับ material_prices — ใช้ตามตารางใน sql/material_prices.sql เท่านั้น
+// ห้ามสร้างชื่อ field ใหม่สำหรับ material_prices — ใช้ตามตารางใน database/material_prices.sql เท่านั้น
 
 import { CATALOG_PACKS } from './catalog-seed.js';
 import { parseCSV, exportToCSV, downloadCSV } from './csv-utils.js';
