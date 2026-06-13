@@ -14,6 +14,7 @@ import {
   DEMO_PROJECT_ID,
 } from '../shared/project-store.js';
 import { wz_checkAndShow, wz_isVisible, WIZARD_EVENT } from '../wizard/wz-index.js';
+import { getDemoProject } from '../shared/demo-seed.js';
 
 const modulePlaceholders = {
   Overview: {
@@ -164,12 +165,64 @@ function handleTabClick(event) {
   setActiveTab(event.currentTarget.dataset.module);
 }
 
+// แบบก่อสร้างของโปรเจกต์ปัจจุบัน — จาก drawing uploads (wizard) หรือ demo สำหรับโปรเจกต์สาธิต
+function loadDrawings() {
+  try {
+    const raw = localStorage.getItem(projectStorageKey(STORAGE_KEYS.drawingUploads));
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length) return arr;
+    }
+  } catch (e) { /* ignore */ }
+  if (getCurrentProjectId() === DEMO_PROJECT_ID) {
+    return Object.values(getDemoProject().drawings || {});
+  }
+  return [];
+}
+
+// Project Browser ด้านซ้าย — รายการที่คลิกได้จริง (แบบก่อสร้าง + ลิงก์ไปหน้า/แท็บรายงาน)
+function renderSidebar() {
+  const tree = document.getElementById('sidebar-tree');
+  if (!tree) return;
+  const drawings = loadDrawings();
+  const drawingItems = drawings.length
+    ? drawings.map(d => {
+        const label = d.file_name || d.sheet_type || 'แบบก่อสร้าง';
+        return `<li class="sidebar__item" data-nav="drawing" data-label="${escapeHtml(label)}"><span class="sidebar__item-icon">📄</span>${escapeHtml(label)}</li>`;
+      }).join('')
+    : '<li class="sidebar__empty">ยังไม่มีแบบ — อัปโหลดในแท็บ Drawing Intelligence</li>';
+
+  tree.innerHTML = `
+    <li class="sidebar__group-label">แบบก่อสร้าง</li>
+    ${drawingItems}
+    <li class="sidebar__group-label">รายงานและสรุป</li>
+    <li class="sidebar__item" data-nav="page" data-target="pages/boq-summary.html"><span class="sidebar__item-icon">📋</span>BOQ Summary</li>
+    <li class="sidebar__item" data-nav="tab" data-target="BBS"><span class="sidebar__item-icon">🔩</span>BBS (ตัดเหล็ก)</li>
+    <li class="sidebar__item" data-nav="page" data-target="pages/material-catalog.html"><span class="sidebar__item-icon">🏷️</span>Material Catalog</li>
+  `;
+}
+
 function handleSidebarClick(event) {
-  const item = event.currentTarget;
+  const item = event.target.closest('.sidebar__item');
+  if (!item) return;
+  const nav = item.dataset.nav;
+  const target = item.dataset.target;
+
+  if (nav === 'page') {
+    window.location.href = target;
+    return;
+  }
+
   document.querySelectorAll('.sidebar__item').forEach(i => i.classList.remove('sidebar__item--selected'));
   item.classList.add('sidebar__item--selected');
-  currentSheet = item.dataset.sheet || item.textContent.trim();
-  renderStatusbar();
+
+  if (nav === 'tab') {
+    setActiveTab(target);
+  } else if (nav === 'drawing') {
+    currentSheet = item.dataset.label || 'แบบก่อสร้าง';
+    setActiveTab('Drawing Intelligence');
+    renderStatusbar();
+  }
 }
 
 function escapeHtml(str) {
@@ -247,6 +300,7 @@ window.constistant_setActiveTab = setActiveTab;
 
 window.addEventListener(PROJECT_EVENT, () => {
   renderProjectSelect();
+  renderSidebar();
   renderProperties();
   renderStatusbar();
   const status = document.getElementById('pipeline-status');
@@ -265,9 +319,11 @@ window.addEventListener(WIZARD_EVENT, () => {
 
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', handleTabClick));
-  document.querySelectorAll('.sidebar__item').forEach(item => item.addEventListener('click', handleSidebarClick));
+  const tree = document.getElementById('sidebar-tree');
+  if (tree) tree.addEventListener('click', handleSidebarClick);
   setActiveTab('Overview');
   renderProjectSelect();
+  renderSidebar();
   renderProperties();
   renderStatusbar();
   // feature modules seed their own localStorage during their DOMContentLoaded (fires after
