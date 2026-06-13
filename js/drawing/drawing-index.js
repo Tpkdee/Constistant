@@ -7,6 +7,44 @@ import { qt_onDragOver, qt_onDragLeave, qt_onDrop, qt_onFileChange, qt_setFile, 
 import { qt_callGeminiParts } from './drawing-gemini.js';
 import { qt_normalizeGeminiResponse } from './drawing-parser.js';
 import { qt_renderReview, qt_setStatus, qt_setProgress, qt_showError, qt_hideError, qt_setPhase, qt_goBack, qt_goReview, qt_getActiveChips, qt_toggleChip, qt_toggleCalcChip, qt_getCalcOptions, qt_updateField, qt_setStirrupType, qt_setSecStirrupType, qt_addLengthGroup, qt_removeLengthGroup, qt_addSection, qt_deleteElement, qt_addElement } from './drawing-ui.js';
+import { qt_initSteelGlobals, qt_runCalculate, qt_copyResult } from './drawing-calc.js';
+import './drawing-bridge.js'; // registers window.qt_saveExtractionToProject (QT output -> schema entities)
+
+async function qt_mountPanel() {
+  const mount = document.getElementById('qt-module');
+  if (!mount || mount.dataset.mounted === '1') return;
+  try {
+    const url = new URL('./quantitake-panel.html', import.meta.url);
+    mount.innerHTML = await (await fetch(url)).text();
+    mount.dataset.mounted = '1';
+  } catch (e) {
+    console.error('[drawing] failed to load quantitake panel', e);
+    return;
+  }
+  qt_wirePanelEvents();
+  qt_setPhase(1);
+}
+
+function qt_wirePanelEvents() {
+  const fileInput = document.getElementById('file-input');
+  if (fileInput) fileInput.addEventListener('change', (e) => qt_onFileChange(e));
+  const dropZone = document.getElementById('drop-zone');
+  if (dropZone) {
+    dropZone.addEventListener('dragover', qt_onDragOver);
+    dropZone.addEventListener('dragleave', qt_onDragLeave);
+    dropZone.addEventListener('drop', qt_onDrop);
+  }
+  const runBtn = document.getElementById('run-btn');
+  if (runBtn) runBtn.addEventListener('click', () => qt_runRead());
+  const keyToggle = document.getElementById('key-toggle');
+  if (keyToggle) {
+    keyToggle.addEventListener('click', () => {
+      const input = document.getElementById('api-key');
+      input.type = input.type === 'password' ? 'text' : 'password';
+      keyToggle.textContent = input.type === 'password' ? '👁' : '🙈';
+    });
+  }
+}
 
 export async function qt_runRead() {
   const key = (globalThis.qt_API_KEY || document.getElementById('api-key').value).trim();
@@ -163,6 +201,8 @@ window.qt_removeLengthGroup = qt_removeLengthGroup;
 window.qt_addSection = qt_addSection;
 window.qt_deleteElement = qt_deleteElement;
 window.qt_addElement = qt_addElement;
+window.qt_runCalculate = qt_runCalculate;
+window.qt_copyResult = qt_copyResult;
 
 globalThis.qt_setPhase = qt_setPhase;
 globalThis.qt_goBack = qt_goBack;
@@ -184,18 +224,8 @@ globalThis.qt_removeLengthGroup = qt_removeLengthGroup;
 globalThis.qt_addSection = qt_addSection;
 globalThis.qt_deleteElement = qt_deleteElement;
 globalThis.qt_addElement = qt_addElement;
+globalThis.qt_runCalculate = qt_runCalculate;
+globalThis.qt_copyResult = qt_copyResult;
 
-if (typeof document !== 'undefined') {
-  const fileInput = document.getElementById('file-input');
-  if (fileInput) fileInput.addEventListener('change', (e) => qt_onFileChange(e));
-  const dropZone = document.getElementById('drop-zone');
-  if (dropZone) {
-    dropZone.addEventListener('dragover', qt_onDragOver);
-    dropZone.addEventListener('dragleave', qt_onDragLeave);
-    dropZone.addEventListener('drop', qt_onDrop);
-  }
-  const runBtn = document.getElementById('run-btn');
-  if (runBtn) runBtn.addEventListener('click', () => qt_runRead());
-  const keyToggle = document.getElementById('key-toggle');
-  if (keyToggle) keyToggle.addEventListener('click', () => { const i = document.getElementById('api-key'); i.type = i.type === 'password' ? 'text' : 'password'; keyToggle.textContent = i.type === 'password' ? '👁' : '🙈'; });
-}
+qt_initSteelGlobals();
+await qt_mountPanel();

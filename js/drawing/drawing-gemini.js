@@ -71,3 +71,28 @@ export function qt_getMime(f) {
   if (f.type === 'image/webp') return 'image/webp';
   return 'image/jpeg';
 }
+
+/**
+ * Classifies a single drawing page image into a sheet_type for the onboarding wizard
+ * (Step 1 thumbnail grid). Returns { sheet_type, confidence } — falls back to
+ * { sheet_type: 'unknown', confidence: 0 } if the model can't answer.
+ *
+ * @param {string} key - Gemini API key
+ * @param {string} imageDataUrl - data URL, e.g. "data:image/jpeg;base64,...."
+ * @returns {Promise<{ sheet_type: 'floor_plan'|'section_detail'|'general_notes'|'schedule_table'|'unknown', confidence: number }>}
+ */
+export async function qt_classifySheet(key, imageDataUrl) {
+  const prompt = `You are a structural engineer reviewing a single page from a construction drawing set.\nClassify this page into ONE category:\n- "floor_plan": structural/architectural floor or layout plan showing element positions (columns, beams, slabs in plan view)\n- "section_detail": section/elevation/detail sheet showing beam/column sections with dimensions and rebar callouts\n- "general_notes": general notes, legend, specifications, or cover sheet\n- "schedule_table": column/beam/footing schedule table\n- "unknown": none of the above, or unreadable\nReturn ONLY valid JSON: {"sheet_type":"floor_plan","confidence":0.9}`;
+  const mime = imageDataUrl.slice(5, imageDataUrl.indexOf(';'));
+  const data = imageDataUrl.split(',')[1];
+  try {
+    const result = await qt_callGeminiParts(key, prompt, [{ inline_data: { mime_type: mime, data } }], 2);
+    const sheetType = ['floor_plan', 'section_detail', 'general_notes', 'schedule_table', 'unknown'].includes(result?.sheet_type)
+      ? result.sheet_type : 'unknown';
+    const confidence = typeof result?.confidence === 'number' ? Math.max(0, Math.min(1, result.confidence)) : 0;
+    return { sheet_type: sheetType, confidence };
+  } catch (e) {
+    console.error('[qt_classifySheet] error:', e.message);
+    return { sheet_type: 'unknown', confidence: 0 };
+  }
+}

@@ -62,6 +62,20 @@ export function selectProject(id) {
   window.dispatchEvent(new CustomEvent(PROJECT_EVENT, { detail: { projectId: id } }));
 }
 
+/**
+ * แก้ไขข้อมูล project ที่มีอยู่ (เช่น sync จาก wizard Step 3 — ชื่อ, ที่ตั้ง, วันเริ่ม)
+ * @param {string} id
+ * @param {object} patch - field ที่จะ merge เข้า project record
+ */
+export function updateProject(id, patch = {}) {
+  const projects = getProjects();
+  const project = projects.find(p => p.id === id);
+  if (!project) return null;
+  Object.assign(project, patch, { updated_at: new Date().toISOString() });
+  saveProjects(projects);
+  return project;
+}
+
 export function addProject(overrides = {}) {
   const projects = getProjects();
   const project = createProject({
@@ -101,6 +115,13 @@ export const PROJECT_SCOPED_KEYS = [
   'constistant_schedule_tasks_v1',
   'constistant_resource_items_v1',
   'constistant_readiness_checks_v1',
+  'constistant_resource_plan_v1',
+  // NEW — Onboarding Wizard + Timeline Engine
+  'constistant_project_config_v1',
+  'constistant_timeline_view_state_v1',
+  'constistant_timeline_estimates_v1',
+  'constistant_drawing_uploads_v1',
+  'constistant_payroll_entries_v1',
 ];
 
 // ─────────────────────────────────────────────
@@ -142,4 +163,14 @@ export function getProjectElements(projectId = getCurrentProjectId()) {
   }
   localStorage.setItem(key, JSON.stringify(data));
   return data;
+}
+
+/**
+ * บันทึก drawing_elements + beam_library ของโปรเจกต์ (overwrite ทั้งชุด)
+ * ใช้โดย Drawing Intelligence bridge (qt_saveExtractionToProject) และ manual fallback
+ * รูปแบบเดียวกับที่ getProjectElements อ่าน: { elements, beamLibraryById }
+ */
+export function saveProjectElements(projectId, elements, beamLibraryById) {
+  const key = `${STORAGE_KEY_ELEMENTS_PREFIX}__${projectId}`;
+  localStorage.setItem(key, JSON.stringify({ elements, beamLibraryById }));
 }

@@ -23,8 +23,18 @@ import {
   REBAR_UNIT_WEIGHT,
   PRODUCTIVITY_RATES,
   CURE_LAG_DAYS,
+  CONCRETE_WASTE_FACTOR,
+  REBAR_WASTE_FACTOR,
+  REBAR_GRADES,
+  BEND_DEDUCTION_D,
+  EQUIPMENT_COST_FACTOR,
+  CONTINGENCY_FACTOR,
+  WORK_TYPE_HIERARCHY,
+  workTypeFromElementType,
+  CREW_TYPES,
 } from './schema.js';
 import { getCurrentProject, getProjectElements, projectStorageKey } from './project-store.js';
+import { applyWeatherBuffer } from './timeline-engine.js';
 
 export const PIPELINE_EVENT = 'constistant:pipeline-updated';
 
@@ -34,6 +44,12 @@ export const STORAGE_KEYS = {
   schedule: 'constistant_schedule_tasks_v1',
   resources: 'constistant_resource_items_v1',
   readiness: 'constistant_readiness_checks_v1',
+  // NEW — Onboarding Wizard + Timeline Engine
+  projectConfig: 'constistant_project_config_v1',
+  timelineViewState: 'constistant_timeline_view_state_v1',
+  timelineEstimates: 'constistant_timeline_estimates_v1',
+  drawingUploads: 'constistant_drawing_uploads_v1',
+  payroll: 'constistant_payroll_entries_v1',
 };
 
 // ─────────────────────────────────────────────
@@ -41,7 +57,6 @@ export const STORAGE_KEYS = {
 // ─────────────────────────────────────────────
 
 const COVER_MM = 25;            // concrete cover ทั่วไป
-const LAP_FACTOR_D = 40;        // lap splice = 40 × diameter
 const HOOK_MM = 75;             // hook ปลายปลอก (ต่อข้าง)
 const DEFAULT_FLOOR_HEIGHT_M = 3.0; // ใช้กับเสาที่ไม่มี span_length_m
 
@@ -63,6 +78,8 @@ const MATERIAL_LEAD_DAYS = { rebar: 7, formwork: 5, concrete: 2 };
 const ELEMENT_LABEL = { column: 'เสา', beam: 'คาน', slab: 'พื้น', footing: 'ฐานราก', staircase: 'บันได' };
 const TASK_LABEL = { rebar: 'งานผูกเหล็ก', formwork: 'งานติดตั้งแบบหล่อ', concrete: 'งานเทคอนกรีต' };
 const TASK_ORDER = ['rebar', 'formwork', 'concrete'];
+const TRADE_BY_CATEGORY = { rebar: 'steel_fixer', formwork: 'carpenter', concrete: 'concrete_gang' };
+const THAI_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
 
 // ─────────────────────────────────────────────
 // Step 0 — Input
@@ -72,8 +89,8 @@ const TASK_ORDER = ['rebar', 'formwork', 'concrete'];
  * ดึง project + drawing_elements + beam_library ของโปรเจกต์ที่กำลังเลือกอยู่
  * โปรเจกต์สาธิต -> seed จาก demo-seed.js (ครั้งแรก)
  * โปรเจกต์ใหม่ -> เริ่มว่างเปล่า (รอข้อมูลจาก Drawing Intelligence ในอนาคต)
- * TODO: ถ้า Drawing Intelligence (qt_*) ผลิต schema-shaped drawing_elements/beam_library
- *       ให้บันทึกผ่าน project-store.js แล้ว pipeline จะหยิบมาใช้ได้ทันที
+ * Drawing Intelligence จริง -> เรียก qt_saveExtractionToProject() (js/drawing/drawing-bridge.js)
+ * หลังอ่านแบบเสร็จ เพื่อแปลง qt_elementsData เป็น schema entities แล้ว pipeline หยิบมาใช้ได้ทันที
  */
 function getInputData() {
   const project = getCurrentProject();
@@ -85,7 +102,7 @@ function getInputData() {
 // Step 1 — BOQ
 // ─────────────────────────────────────────────
 
-function computeBOQ(elements, beamLibraryById, project) {
+export function computeBOQ(elements, beamLibraryById, project) {
   const boqItems = [];
 
   for (const el of elements) {
@@ -95,6 +112,10 @@ function computeBOQ(elements, beamLibraryById, project) {
     const type = el.element_type;
     const dia = lib.main_bar_dia_mm;
     const idBase = `boq-${el.element_id}-${el.floor_level}`;
+
+    const workType = workTypeFromElementType(type);
+    const workTypeDef = WORK_TYPE_HIERARCHY[workType] || WORK_TYPE_HIERARCHY.other;
+    const categoryInfo = workTypeDef.sub_categories?.[type] || workTypeDef;
 
     let concreteVolumeM3 = 0;
     let formworkAreaM2 = 0;
@@ -120,11 +141,19 @@ function computeBOQ(elements, beamLibraryById, project) {
         ? parseFloat((count * (2 * hM + wM) * lengthM).toFixed(2))   // 2 ข้าง + ท้องคาน
         : parseFloat((count * 2 * (wM + hM) * lengthM).toFixed(2));  // เสา/ฐานราก: รอบหน้าตัด
 
-      const lapM = (LAP_FACTOR_D * dia) / 1000;
+      const lapFactorD = (REBAR_GRADES[lib.steel_grade] || REBAR_GRADES.SD40).lap_factor_d;
+      const lapM = (lapFactorD * dia) / 1000;
       const cutLengthM = lengthM + lapM;
       const totalLengthM = count * (lib.main_bar_count || 0) * cutLengthM;
       rebarWeightKg = calcRebarWeight(dia, totalLengthM) || 0;
     }
+
+    // เผื่อเสีย (waste factor) ก่อนคิดราคา BOQ
+    const concreteQty = parseFloat((concreteVolumeM3 * CONCRETE_WASTE_FACTOR).toFixed(3));
+    const rebarQty = parseFloat((rebarWeightKg * REBAR_WASTE_FACTOR).toFixed(2));
+
+    // flag รายการที่อ่านจากแบบด้วยความมั่นใจต่ำ ให้ตรวจสอบก่อนสั่งวัสดุ
+    const status = (el.confidence_score ?? 1) < 0.75 ? 'needs_review' : 'ok';
 
     boqItems.push(createBOQItem({
       id: `${idBase}-concrete`,
@@ -134,11 +163,16 @@ function computeBOQ(elements, beamLibraryById, project) {
       description: `คอนกรีต ${ELEMENT_LABEL[type] || type} ${el.element_id} ชั้น ${el.floor_level}`,
       work_category: 'concrete',
       unit: 'm3',
-      quantity: concreteVolumeM3,
+      quantity: concreteQty,
       unit_rate_thb: CONCRETE_RATE_THB[type] ?? 4500,
-      amount_thb: parseFloat((concreteVolumeM3 * (CONCRETE_RATE_THB[type] ?? 4500)).toFixed(2)),
+      amount_thb: parseFloat((concreteQty * (CONCRETE_RATE_THB[type] ?? 4500)).toFixed(2)),
       floor_level: el.floor_level,
       element_type: type,
+      status,
+      work_type: workType,
+      category_code: categoryInfo.category_code,
+      category_label_th: categoryInfo.category_label_th,
+      unit_price_source: 'bq_standard_2567',
     }));
 
     boqItems.push(createBOQItem({
@@ -149,11 +183,16 @@ function computeBOQ(elements, beamLibraryById, project) {
       description: `เหล็กเสริม ${ELEMENT_LABEL[type] || type} ${el.element_id} ชั้น ${el.floor_level} (DB${dia})`,
       work_category: 'rebar',
       unit: 'kg',
-      quantity: rebarWeightKg,
+      quantity: rebarQty,
       unit_rate_thb: REBAR_RATE_THB_PER_KG,
-      amount_thb: parseFloat((rebarWeightKg * REBAR_RATE_THB_PER_KG).toFixed(2)),
+      amount_thb: parseFloat((rebarQty * REBAR_RATE_THB_PER_KG).toFixed(2)),
       floor_level: el.floor_level,
       element_type: type,
+      status,
+      work_type: workType,
+      category_code: categoryInfo.category_code,
+      category_label_th: categoryInfo.category_label_th,
+      unit_price_source: 'bq_standard_2567',
     }));
 
     boqItems.push(createBOQItem({
@@ -169,6 +208,11 @@ function computeBOQ(elements, beamLibraryById, project) {
       amount_thb: parseFloat((formworkAreaM2 * (FORMWORK_RATE_THB[type] ?? 250)).toFixed(2)),
       floor_level: el.floor_level,
       element_type: type,
+      status,
+      work_type: workType,
+      category_code: categoryInfo.category_code,
+      category_label_th: categoryInfo.category_label_th,
+      unit_price_source: 'bq_standard_2567',
     }));
   }
 
@@ -218,9 +262,10 @@ function computeBBS(elements, beamLibraryById, boqItems, project) {
       continue;
     }
 
-    // เหล็กแกนหลัก (main bars)
+    // เหล็กแกนหลัก (main bars) — lap splice ขึ้นกับชั้นเหล็ก (steel_grade)
     const lengthM = el.span_length_m || DEFAULT_FLOOR_HEIGHT_M;
-    const lapMm = LAP_FACTOR_D * dia;
+    const lapFactorD = (REBAR_GRADES[lib.steel_grade] || REBAR_GRADES.SD40).lap_factor_d;
+    const lapMm = lapFactorD * dia;
     const cutLengthMm = parseFloat((lengthM * 1000 + lapMm).toFixed(0));
     const totalBarsMain = (el.count || 0) * (lib.main_bar_count || 0);
 
@@ -247,11 +292,13 @@ function computeBBS(elements, beamLibraryById, boqItems, project) {
     if (lib.stirrup_dia_mm) {
       const wMm = lib.width_mm || 0;
       const hMm = lib.height_mm || 0;
-      const perimeterMm = 2 * ((wMm - 2 * COVER_MM) + (hMm - 2 * COVER_MM)) + 2 * HOOK_MM;
+      const stirrupDia = lib.stirrup_dia_mm;
+      // เส้นรอบรูป + ตะขอปลายทั้งสองข้าง หักความยาวจากมุมดัด 90° ของปลอกปิด (มยผ. 1103)
+      const perimeterMm = 2 * ((wMm - 2 * COVER_MM) + (hMm - 2 * COVER_MM)) + 2 * HOOK_MM
+        - BEND_DEDUCTION_D.stirrup_closed * stirrupDia;
       const spacingM = (lib.stirrup_spacing_mm || 200) / 1000;
       const barsPerMember = Math.max(1, Math.ceil(lengthM / spacingM) + 1);
       const totalBarsStirrup = (el.count || 0) * barsPerMember;
-      const stirrupDia = lib.stirrup_dia_mm;
 
       bbsItems.push(createBBSItem({
         id: `bbs-${el.element_id}-${el.floor_level}-stirrup`,
@@ -291,9 +338,29 @@ function toISODate(date) {
   return date.toISOString().slice(0, 10);
 }
 
-function computeSchedule(elements, boqItems, project) {
+function loadProjectConfig(projectId) {
+  try {
+    const raw = localStorage.getItem(projectStorageKey(STORAGE_KEYS.projectConfig, projectId));
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    console.error('[pipeline] failed to load project config', e);
+    return null;
+  }
+}
+
+function periodMonthFor(date, projectStart) {
+  return (date.getUTCFullYear() - projectStart.getUTCFullYear()) * 12
+    + (date.getUTCMonth() - projectStart.getUTCMonth()) + 1;
+}
+
+export function computeSchedule(elements, boqItems, project) {
+  const projectConfig = loadProjectConfig(project.id);
+  const rainyMonths = projectConfig?.timeline?.rainy_season_months;
+  const useEngineWeather = Array.isArray(rainyMonths) && rainyMonths.length > 0;
+
   const tasks = [];
   let cursor = new Date(`${project.start_date}T00:00:00Z`);
+  const projectStart = new Date(`${project.start_date}T00:00:00Z`);
   let prevTaskId = null;
 
   // เรียงตามชั้น (F1 ก่อน F2) ตามลำดับที่ elements ถูกส่งเข้ามา (demo-seed เรียงไว้แล้ว)
@@ -301,6 +368,7 @@ function computeSchedule(elements, boqItems, project) {
     const type = el.element_type;
     const items = boqItems.filter(b => b.drawing_element_id === el.id);
     const itemByCategory = Object.fromEntries(items.map(b => [b.work_category, b]));
+    const workType = workTypeFromElementType(type);
 
     TASK_ORDER.forEach((category, taskIdx) => {
       const boq = itemByCategory[category];
@@ -316,12 +384,15 @@ function computeSchedule(elements, boqItems, project) {
       const baseDuration = parseFloat(Math.max(boq.quantity / (crewSize * productivity), 0.5).toFixed(1));
 
       const month = cursor.getUTCMonth() + 1;
-      const adjustedDuration = calcAdjustedDuration(baseDuration, month);
+      const adjustedDuration = useEngineWeather ? baseDuration : calcAdjustedDuration(baseDuration, month);
       const startDate = new Date(cursor);
       const endDate = addDays(startDate, Math.ceil(adjustedDuration));
 
       const taskId = `task-${el.element_id}-${el.floor_level}-${category}`;
       const leadDays = MATERIAL_LEAD_DAYS[category] ?? 5;
+      const predecessorIds = prevTaskId ? [prevTaskId] : [];
+      const trade = TRADE_BY_CATEGORY[category];
+      const periodMonth = periodMonthFor(startDate, projectStart);
 
       tasks.push(createScheduleTask({
         id: taskId,
@@ -340,11 +411,18 @@ function computeSchedule(elements, boqItems, project) {
         adjusted_duration_days: adjustedDuration,
         start_date: toISODate(startDate),
         end_date: toISODate(endDate),
-        predecessor_task_ids: prevTaskId ? [prevTaskId] : [],
+        predecessor_task_ids: predecessorIds,
         lag_days: 0,
         is_critical: true,
         material_order_date: toISODate(addDays(startDate, -leadDays)),
         material_lead_time_days: leadDays,
+        work_type: workType,
+        period_month: periodMonth,
+        period_label: `เดือนที่ ${periodMonth}`,
+        resource_group: { primary_trade: trade, crew_type: trade, crew_count: crewSize },
+        depends_on_task_ids: predecessorIds,
+        is_critical_path: true,
+        task_cost_estimate: parseFloat((crewSize * (CREW_TYPES[trade]?.day_rate_thb ?? 0) * adjustedDuration).toFixed(2)),
       }));
 
       // คอนกรีตต้องรอ cure ก่อนเริ่มงานถัดไป
@@ -354,7 +432,7 @@ function computeSchedule(elements, boqItems, project) {
     });
   });
 
-  return tasks;
+  return useEngineWeather ? applyWeatherBuffer(tasks, rainyMonths, 0.4) : tasks;
 }
 
 // ─────────────────────────────────────────────
@@ -455,6 +533,43 @@ function computeResources(boqItems, scheduleTasks, project) {
     }));
   }
 
+  // เครื่องจักร/อุปกรณ์ (ปั๊มคอนกรีต, เครื่องสั่น, เครน ฯลฯ) — ประมาณการเป็น % ของต้นทุนวัสดุ
+  const totalMaterialCost = items
+    .filter(i => i.resource_type === 'material')
+    .reduce((sum, i) => sum + (i.total_cost_thb || 0), 0);
+
+  if (totalMaterialCost > 0) {
+    const equipmentCost = parseFloat((totalMaterialCost * EQUIPMENT_COST_FACTOR).toFixed(2));
+    items.push(createResourceItem({
+      id: 'res-equipment-misc',
+      project_id: project.id,
+      resource_type: 'equipment',
+      name: 'เครื่องจักร/อุปกรณ์ก่อสร้าง (ปั๊มคอนกรีต, เครื่องสั่น, เครน)',
+      unit: 'lot',
+      quantity: 1,
+      unit_cost_thb: equipmentCost,
+      total_cost_thb: equipmentCost,
+      supplier_id: null,
+    }));
+  }
+
+  // เผื่อเหลือเผื่อขาด (contingency) — % ของต้นทุนรวม (วัสดุ + แรงงาน + เครื่องจักร)
+  const subtotalCost = items.reduce((sum, i) => sum + (i.total_cost_thb || 0), 0);
+  if (subtotalCost > 0) {
+    const contingencyCost = parseFloat((subtotalCost * CONTINGENCY_FACTOR).toFixed(2));
+    items.push(createResourceItem({
+      id: 'res-contingency',
+      project_id: project.id,
+      resource_type: 'contingency',
+      name: `เผื่อเหลือเผื่อขาด (Contingency ${(CONTINGENCY_FACTOR * 100).toFixed(0)}%)`,
+      unit: 'lot',
+      quantity: 1,
+      unit_cost_thb: contingencyCost,
+      total_cost_thb: contingencyCost,
+      supplier_id: null,
+    }));
+  }
+
   return items;
 }
 
@@ -462,7 +577,7 @@ function computeResources(boqItems, scheduleTasks, project) {
 // Step 5 — Readiness Check (auto-generated checks)
 // ─────────────────────────────────────────────
 
-function computeReadiness(elements, boqItems, bbsItems, scheduleTasks, project, existingChecks) {
+export function computeReadiness(elements, boqItems, bbsItems, scheduleTasks, project, existingChecks) {
   const now = new Date();
 
   // 1) แบบครบถ้วน?
@@ -562,6 +677,49 @@ function computeReadiness(elements, boqItems, bbsItems, scheduleTasks, project, 
 
   const autoChecks = [drawingComplete, bbsReady, materialLead, weatherRisk, crewAvailable];
 
+  // 6) ระยะเวลาที่ผู้ใช้กำหนด (จาก wizard) สั้นกว่าประมาณการขั้นต่ำหรือไม่
+  const projectConfig = loadProjectConfig(project.id);
+  if (projectConfig) {
+    const timeline = projectConfig.timeline || {};
+    if (timeline.user_duration_days != null && timeline.estimated_min_days != null
+      && timeline.user_duration_days < timeline.estimated_min_days) {
+      const shortBy = timeline.estimated_min_days - timeline.user_duration_days;
+      autoChecks.push(createReadinessCheck({
+        id: 'check-timeline-risk-auto',
+        project_id: project.id,
+        check_type: 'timeline_risk',
+        status: 'red',
+        title: 'ระยะเวลาสั้นเกินไป',
+        detail: `กำหนดระยะเวลา ${timeline.user_duration_days} วัน น้อยกว่าประมาณการขั้นต่ำ ${timeline.estimated_min_days} วัน (ขาดอีก ${shortBy} วัน)`,
+        recommendation: 'เพิ่มจำนวนทีมงาน หรือขยายระยะเวลาโครงการให้สอดคล้องกับประมาณการ',
+        auto_generated: true,
+        checked_at: now.toISOString(),
+      }));
+    }
+
+    // 7) งานโครงสร้าง/ฐานราก ตรงกับฤดูฝน (จาก weather_risk ที่ applyWeatherBuffer คำนวณไว้)
+    const overlapMonths = new Set();
+    scheduleTasks.forEach(t => {
+      if ((t.work_type === 'structure' || t.work_type === 'foundation') && t.weather_risk === 'high' && t.start_date) {
+        overlapMonths.add(new Date(`${t.start_date}T00:00:00Z`).getUTCMonth() + 1);
+      }
+    });
+    if (overlapMonths.size) {
+      const monthNames = [...overlapMonths].sort((a, b) => a - b).map(m => THAI_MONTHS[m - 1]);
+      autoChecks.push(createReadinessCheck({
+        id: 'check-weather-overlap-auto',
+        project_id: project.id,
+        check_type: 'weather_overlap',
+        status: 'yellow',
+        title: 'ช่วงโครงสร้างตรงกับฤดูฝน',
+        detail: `งานโครงสร้าง/ฐานรากตรงกับฤดูฝนในเดือน ${monthNames.join(', ')}`,
+        recommendation: 'เตรียมแผนป้องกันฝนสำหรับงานเทคอนกรีต/ผูกเหล็กในช่วงเดือนดังกล่าว',
+        auto_generated: true,
+        checked_at: now.toISOString(),
+      }));
+    }
+  }
+
   // เก็บ check ที่ user เพิ่มเอง (auto_generated: false) ไว้ตามเดิม
   const manualChecks = (existingChecks || []).filter(c => !c.auto_generated);
 
@@ -642,7 +800,7 @@ export async function runPipeline(onProgress = () => {}) {
     project_end_date: schedule.length ? schedule[schedule.length - 1].end_date : null,
   };
 
-  window.dispatchEvent(new CustomEvent(PIPELINE_EVENT, { detail: { boq, bbs, schedule, resources, readiness, totals } }));
+  window.dispatchEvent(new CustomEvent(PIPELINE_EVENT, { detail: { boq, bbs, schedule, resources, readiness, totals, reason: 'full-run' } }));
 
   return { boq, bbs, schedule, resources, readiness, totals };
 }

@@ -30,9 +30,11 @@ import {
   createSupplier,
   createPayrollEntry,
   createReadinessCheck,
+  createProjectConfig,
   calcRebarWeight,
   calcAdjustedDuration,
   REBAR_UNIT_WEIGHT,
+  CREW_TYPES,
 } from './schema.js';
 
 // ─────────────────────────────────────────────
@@ -314,6 +316,9 @@ const BOQ_ITEMS = {
     amount_thb: parseFloat((9 * 0.3 * 0.3 * 3.0 * 4500).toFixed(2)),
     floor_level: 'F1',
     element_type: 'column',
+    work_type: 'structure',
+    category_code: '3.1',
+    category_label_th: 'งานเสา',
   }),
 
   // คอนกรีตคาน B1 F1: 6 คาน × (0.2 × 0.4) m² × 4.5m
@@ -330,6 +335,9 @@ const BOQ_ITEMS = {
     amount_thb: parseFloat((6 * 0.2 * 0.4 * 4.5 * 4500).toFixed(2)),
     floor_level: 'F1',
     element_type: 'beam',
+    work_type: 'structure',
+    category_code: '3.2',
+    category_label_th: 'งานคาน',
   }),
 
   // คอนกรีตพื้น S1 F2: พื้นที่ 150 m² × หนา 0.12m
@@ -346,6 +354,9 @@ const BOQ_ITEMS = {
     amount_thb: parseFloat((150 * 0.12 * 4200).toFixed(2)),
     floor_level: 'F2',
     element_type: 'slab',
+    work_type: 'structure',
+    category_code: '3.3',
+    category_label_th: 'งานพื้น',
   }),
 
   // เหล็กเสา C1 F1: 9 ต้น × 8 เส้น DB16 สูง 3.0m (+ lap splice 40d = 40×16mm = 640mm)
@@ -362,6 +373,9 @@ const BOQ_ITEMS = {
     get amount_thb() { return parseFloat((this.quantity * this.unit_rate_thb).toFixed(2)); },
     floor_level: 'F1',
     element_type: 'column',
+    work_type: 'structure',
+    category_code: '3.1',
+    category_label_th: 'งานเสา',
   }),
 
   // เหล็กแบบหล่อ (Formwork) เสา F1
@@ -378,6 +392,9 @@ const BOQ_ITEMS = {
     get amount_thb() { return parseFloat((this.quantity * this.unit_rate_thb).toFixed(2)); },
     floor_level: 'F1',
     element_type: 'column',
+    work_type: 'structure',
+    category_code: '3.1',
+    category_label_th: 'งานเสา',
   }),
 
 };
@@ -491,6 +508,15 @@ const SCHEDULE_TASKS = {
     is_critical: true,
     material_order_date: '2025-08-25',   // 7 วันก่อน start
     material_lead_time_days: 7,
+    work_type: 'structure',
+    period_month: 1,
+    period_label: 'เดือนที่ 1',
+    resource_group: { primary_trade: 'steel_fixer', crew_type: 'steel_fixer', crew_count: 2 },
+    depends_on_task_ids: [],
+    is_critical_path: true,
+    get task_cost_estimate() {
+      return parseFloat((this.crew_size * CREW_TYPES.steel_fixer.day_rate_thb * this.adjusted_duration_days).toFixed(2));
+    },
   }),
 
   // งานแบบหล่อเสาชั้น 1
@@ -518,6 +544,15 @@ const SCHEDULE_TASKS = {
     is_critical: true,
     material_order_date: '2025-08-28',
     material_lead_time_days: 5,
+    work_type: 'structure',
+    period_month: 1,
+    period_label: 'เดือนที่ 1',
+    resource_group: { primary_trade: 'carpenter', crew_type: 'carpenter', crew_count: 2 },
+    depends_on_task_ids: ['task-rebar-col-F1'],
+    is_critical_path: true,
+    get task_cost_estimate() {
+      return parseFloat((this.crew_size * CREW_TYPES.carpenter.day_rate_thb * this.adjusted_duration_days).toFixed(2));
+    },
   }),
 
   // งานเทคอนกรีตเสาชั้น 1
@@ -546,6 +581,15 @@ const SCHEDULE_TASKS = {
     // Cure lag: รอ 3 วันก่อนเริ่มงานถัดไป
     material_order_date: '2025-09-02',   // สั่งวันก่อนเท
     material_lead_time_days: 1,
+    work_type: 'structure',
+    period_month: 1,
+    period_label: 'เดือนที่ 1',
+    resource_group: { primary_trade: 'concrete_gang', crew_type: 'concrete_gang', crew_count: 5 },
+    depends_on_task_ids: ['task-fw-col-F1'],
+    is_critical_path: true,
+    get task_cost_estimate() {
+      return parseFloat((this.crew_size * CREW_TYPES.concrete_gang.day_rate_thb * this.adjusted_duration_days).toFixed(2));
+    },
   }),
 
   // รอคอนกรีตแข็งตัว → เริ่มคานชั้น 2
@@ -573,6 +617,15 @@ const SCHEDULE_TASKS = {
     is_critical: true,
     material_order_date: '2025-08-30',
     material_lead_time_days: 7,
+    work_type: 'structure',
+    period_month: 1,
+    period_label: 'เดือนที่ 1',
+    resource_group: { primary_trade: 'steel_fixer', crew_type: 'steel_fixer', crew_count: 2 },
+    depends_on_task_ids: ['task-concrete-col-F1'],
+    is_critical_path: true,
+    get task_cost_estimate() {
+      return parseFloat((this.crew_size * CREW_TYPES.steel_fixer.day_rate_thb * this.adjusted_duration_days).toFixed(2));
+    },
   }),
 
 };
@@ -644,6 +697,35 @@ const RESOURCE_ITEMS = {
     supplier_id: DEMO_SUPPLIER.id,
   }),
 
+};
+
+// ─────────────────────────────────────────────
+// TIER 5A.1: RESOURCE PLAN SEED (Resource Hub — confirmations / inventory / equipment)
+// ─────────────────────────────────────────────
+// ค่าเริ่มต้นสำหรับ Resource Hub dashboard (ความพร้อมแรงงาน / สต็อกวัสดุ / สถานะเครื่องจักร)
+// ออกแบบให้เกิด 2 red alert (steel_fixer + concrete_gang ขาดคน, เหล็ก DB16 ยังไม่สั่ง)
+// และ 1 amber alert (carpenter ครบจำนวนแต่ยังไม่ยืนยัน contact)
+//
+// required_count ของแต่ละ crew_type คำนวณจาก schedule_tasks.crew_size (peak ต่อ crew_type) โดย resource-index.js
+//   - steel_fixer:   max(rebar_col_F1=2, beam_rebar_F2=2)   => required 2, confirmed 1 (50%)  -> red
+//   - carpenter:     formwork_col_F1=2                       => required 2, confirmed 2 (100%) -> green
+//   - concrete_gang: concrete_col_F1=5                       => required 5, confirmed 2 (40%)  -> red
+const RESOURCE_PLAN_SEED = {
+  crew_confirmed: {
+    steel_fixer: 1,
+    carpenter: 2,
+    concrete_gang: 2,
+  },
+  material_status: {
+    [RESOURCE_ITEMS.rebar_DB16.id]: {
+      qty_ordered: 0,
+      qty_received: 0,
+      supplier_name: DEMO_SUPPLIER.name,
+    },
+  },
+  equipment_status: {
+    concrete_pump: { status: 'not_booked', vendor_name: '' },
+  },
 };
 
 const PAYROLL = {
@@ -741,6 +823,55 @@ const READINESS_CHECKS = {
 };
 
 // ─────────────────────────────────────────────
+// TIER 5: PROJECT CONFIG (Onboarding Wizard output)
+// ─────────────────────────────────────────────
+
+const PROJECT_CONFIG = createProjectConfig({
+  id: 'config-demo-project-001',
+  project_id: PROJECT.id,
+  project_name: PROJECT.name,
+  building_type: PROJECT.building_type,
+  floor_count: PROJECT.floors_above_ground,
+  total_area_sqm: PROJECT.total_area_sqm,
+  design_standard: 'WSD',
+  site_province: 'กรุงเทพมหานคร',
+  site_district: 'ลาดพร้าว',
+  site_lat: PROJECT.location_lat,
+  site_lng: PROJECT.location_lng,
+  timeline: {
+    estimated_min_days: 75,
+    estimated_recommended_days: 90,
+    estimated_max_days: 110,
+    user_start_date: '2025-09-01',
+    user_end_date: '2025-11-30',
+    user_duration_days: 90,
+    weather_buffer_days: 12,
+    rainy_season_months: [9, 10],
+    estimation_basis: {
+      element_counts: { structure: 3 },
+      productivity_rates_used: null,
+      crew_size_used: 8,
+      weather_source: 'provincial_table',
+    },
+  },
+  budget_impact: {
+    baseline_cost_estimate: 1850000,
+    current_cost_estimate: 1850000,
+    delta_cost: 0,
+    delta_reason: null,
+    extra_crew_needed: 0,
+    rain_risk_extra_days: 8,
+    risk_level: 'low',
+  },
+  pricing_source: 'standard_bq',
+  catalog_supplier_ids: [],
+  wizard_completed_at: '2025-08-20T10:00:00Z',
+  wizard_step_reached: 4,
+  created_at: '2025-08-20T10:00:00Z',
+  updated_at: '2025-08-20T10:00:00Z',
+});
+
+// ─────────────────────────────────────────────
 // PUBLIC API — วิธีที่ module อื่นเรียกใช้ข้อมูล
 // ─────────────────────────────────────────────
 
@@ -762,6 +893,7 @@ export function getDemoProject() {
     resource_items: RESOURCE_ITEMS,
     payroll: PAYROLL,
     readiness_checks: READINESS_CHECKS,
+    project_config: PROJECT_CONFIG,
   };
 }
 
@@ -799,6 +931,7 @@ export function getDemoDataByEngine(engine) {
         boq_items: Object.values(BOQ_ITEMS),
         project_location: { lat: PROJECT.location_lat, lng: PROJECT.location_lng },
         project_start_date: PROJECT.start_date,
+        project_config: PROJECT_CONFIG,
         // OUTPUT ที่ engine นี้ต้องสร้าง
         expected_tasks: Object.values(SCHEDULE_TASKS),
         expected_weather: Object.values(WEATHER_SNAPSHOTS),
@@ -813,12 +946,15 @@ export function getDemoDataByEngine(engine) {
         expected_resources: Object.values(RESOURCE_ITEMS),
         expected_payroll: Object.values(PAYROLL),
         suppliers: [DEMO_SUPPLIER],
+        // ค่าเริ่มต้นสำหรับ Resource Hub dashboard (ความพร้อมแรงงาน/สต็อก/เครื่องจักร)
+        resource_plan_seed: RESOURCE_PLAN_SEED,
       };
 
     case 'readiness':
       return {
         // INPUT: ทุก engine (Readiness Check อ่านจากทุกอย่าง)
         project: PROJECT,
+        project_config: PROJECT_CONFIG,
         drawings: [DRAWING_SECTION, DRAWING_FLOORPLAN],
         drawing_elements: Object.values(ELEMENTS),
         schedule_tasks: Object.values(SCHEDULE_TASKS),

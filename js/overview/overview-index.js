@@ -14,6 +14,7 @@ import {
   PROJECT_EVENT,
 } from '../shared/project-store.js';
 import { STORAGE_KEYS, PIPELINE_EVENT } from '../shared/pipeline.js';
+import { groupTasksByMode } from '../shared/timeline-engine.js';
 
 const ELEMENT_TYPES = ['column', 'beam', 'girder', 'slab', 'footing', 'staircase'];
 const ELEMENT_LABEL = { column: 'เสา (Column)', beam: 'คาน (Beam)', girder: 'คานหลัก (Girder)', slab: 'พื้น (Slab)', footing: 'ฐานราก (Footing)', staircase: 'บันได (Staircase)' };
@@ -126,6 +127,16 @@ function computeScheduleByFloor(schedule) {
   return byFloor;
 }
 
+function computeWorkBreakdown(schedule) {
+  if (!schedule.length) return [];
+  return groupTasksByMode(schedule, 'work_type').map(group => ({
+    label: group.label,
+    taskCount: group.tasks.length,
+    totalDays: group.tasks.reduce((s, t) => s + (t.adjusted_duration_days ?? t.base_duration_days ?? 0), 0),
+    totalCost: group.tasks.reduce((s, t) => s + (t.task_cost_estimate || 0), 0),
+  }));
+}
+
 function computeElementSummary(elements, boq) {
   return ELEMENT_TYPES.map(type => {
     const els = elements.filter(e => e.element_type === type);
@@ -165,6 +176,7 @@ function render() {
   const breakdown = computeBOQBreakdown(boq);
   const scheduleByFloor = computeScheduleByFloor(schedule);
   const elementSummary = computeElementSummary(elements, boq);
+  const workBreakdown = computeWorkBreakdown(schedule);
 
   const ragColor = RAG_COLOR[rag.overall];
   const lastUpdated = readiness.reduce((latest, c) => {
@@ -233,6 +245,32 @@ function render() {
         </thead>
         <tbody>
           ${elementSummary.map(renderElementRow).join('')}
+        </tbody>
+      </table>
+      `}
+    </div>
+
+    <div class="fp-card">
+      <h2>สรุปงานตามหมวดงาน (Work Breakdown)</h2>
+      ${workBreakdown.length === 0 ? '<p class="fp-empty">ยังไม่มีแผนงาน — กด Calculate Project</p>' : `
+      <table class="ov-table">
+        <thead>
+          <tr>
+            <th>หมวดงาน</th>
+            <th class="ov-num">จำนวนงาน</th>
+            <th class="ov-num">ระยะเวลารวม (วัน)</th>
+            <th class="ov-num">ประมาณการต้นทุน (฿)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${workBreakdown.map(row => `
+            <tr>
+              <td>${escapeHtml(row.label)}</td>
+              <td class="ov-num">${row.taskCount}</td>
+              <td class="ov-num">${formatNum(row.totalDays, 1)}</td>
+              <td class="ov-num">฿${formatTHB(row.totalCost)}</td>
+            </tr>
+          `).join('')}
         </tbody>
       </table>
       `}

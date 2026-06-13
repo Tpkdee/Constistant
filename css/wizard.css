@@ -1,0 +1,419 @@
+/* wizard.css — Onboarding Wizard overlay (Steps 1-4)
+   Prefix: .wz-* (DELTA 3.1 — overrides AOW's .fp-wizard-* prefix)
+   Reuses CSS variables from shell.css and .fp-btn-primary/.fp-btn-secondary from feature-panels.css */
+
+.wz-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+  padding: 24px;
+}
+
+.wz-overlay[hidden] {
+  display: none;
+}
+
+.wz-shell {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  width: 100%;
+  max-width: 920px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ───────────────────────────────────────────── progress dots */
+
+.wz-progress {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 20px 28px 16px;
+  border-bottom: 1px solid var(--color-border-default);
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+}
+
+.wz-dot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-disabled);
+  text-align: center;
+}
+
+.wz-dot__num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  background: var(--color-border-default);
+  color: var(--color-text-secondary);
+}
+
+.wz-dot--active .wz-dot__num {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.wz-dot--active {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.wz-dot--done .wz-dot__num {
+  background: var(--color-primary-active);
+  color: var(--color-on-primary);
+}
+
+.wz-dot--done .wz-dot__label {
+  color: var(--color-text-secondary);
+}
+
+/* ───────────────────────────────────────────── step root / generic step layout */
+
+.wz-step-root {
+  padding: 24px 28px 28px;
+}
+
+.wz-step__title {
+  font-size: 20px;
+  margin: 0 0 6px;
+}
+
+.wz-step__desc {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  margin: 0 0 18px;
+}
+
+.wz-panel {
+  background: #fff;
+  border: 1px solid var(--color-border-default);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+.wz-panel__title {
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
+.wz-panel__desc {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+
+/* ───────────────────────────────────────────── form fields */
+
+.wz-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.wz-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.wz-input {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  background: #fff;
+}
+
+.wz-input--narrow {
+  max-width: 100px;
+}
+
+.wz-hint {
+  color: var(--color-text-disabled);
+  font-size: 12px;
+}
+
+.wz-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wz-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+/* ───────────────────────────────────────────── tables */
+
+.wz-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.wz-table th, .wz-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.wz-table th {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+/* ───────────────────────────────────────────── dropzone & thumbnails */
+
+.wz-dropzone {
+  border: 2px dashed var(--color-border-default);
+  border-radius: 10px;
+  padding: 28px;
+  text-align: center;
+  cursor: pointer;
+  margin-bottom: 16px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.wz-dropzone:hover, .wz-dropzone--over {
+  border-color: var(--color-primary);
+  background: var(--color-surface-row-hover);
+}
+
+.wz-dropzone__icon {
+  font-size: 28px;
+  margin-bottom: 6px;
+}
+
+.wz-dropzone__text {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.wz-link {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.wz-link-btn {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.wz-dropzone__filename {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.wz-thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.wz-thumb {
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+.wz-thumb img {
+  width: 100%;
+  height: 90px;
+  object-fit: cover;
+  display: block;
+  background: var(--color-canvas-light);
+}
+
+.wz-thumb__caption {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  padding: 4px 6px 0;
+}
+
+.wz-icon-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-disabled);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+}
+
+.wz-icon-btn:hover {
+  color: #ef4444;
+}
+
+/* ───────────────────────────────────────────── badges & banners */
+
+.wz-badge {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 6px;
+  margin: 4px 6px 6px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.wz-badge--pending { background: var(--color-border-default); color: var(--color-text-secondary); }
+.wz-badge--green { background: #dcfce7; color: #166534; }
+.wz-badge--amber { background: #fef3c7; color: #92400e; }
+.wz-badge--red { background: #fee2e2; color: #991b1b; }
+
+.wz-banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.wz-banner--info { background: var(--color-surface-row); color: var(--color-text-primary); }
+.wz-banner--amber { background: #fef3c7; color: #92400e; }
+.wz-banner--red { background: #fee2e2; color: #991b1b; }
+
+/* ───────────────────────────────────────────── timeline bars (Step 3) */
+
+.wz-timeline-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.wz-bar-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 70px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.wz-bar-row__label { color: var(--color-text-secondary); }
+.wz-bar-row__value { text-align: right; font-weight: 600; }
+
+.wz-bar {
+  height: 10px;
+  background: var(--color-border-default);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.wz-bar__fill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.wz-bar__fill--min { background: #93c5fd; }
+.wz-bar__fill--recommended { background: var(--color-primary); }
+.wz-bar__fill--max { background: #fca5a5; }
+
+/* ───────────────────────────────────────────── checklist (Step 4) */
+
+.wz-checklist {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wz-checklist__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.wz-checklist__item--active {
+  border-color: var(--color-primary);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.wz-checklist__item--done {
+  color: var(--color-text-primary);
+}
+
+.wz-checklist__icon {
+  font-size: 14px;
+}
+
+/* ───────────────────────────────────────────── status & actions */
+
+.wz-status {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  min-height: 18px;
+  margin-bottom: 10px;
+}
+
+.wz-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border-default);
+  margin-top: 8px;
+}
+
+.wz-actions__spacer {
+  flex: 1;
+}
+
+/* tab gating */
+.tab--disabled {
+  opacity: 0.45;
+}
+
+body.wz-open {
+  overflow: hidden;
+}
