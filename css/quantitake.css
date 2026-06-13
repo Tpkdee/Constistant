@@ -165,6 +165,10 @@
 .qt-module .copy-btn{background:var(--border);border:none;border-radius:6px;padding:6px 16px;font-size:11px;font-weight:700;color:#94a3b8;cursor:pointer;font-family:inherit;transition:all .2s}
 .qt-module .copy-btn:hover{background:var(--dim)}
 .qt-module .copy-btn.copied{background:var(--green);color:#fff}
+.qt-module .save-btn{background:var(--accent);border:none;border-radius:6px;padding:6px 16px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;transition:all .2s}
+.qt-module .save-btn:hover{filter:brightness(1.1)}
+.qt-module .save-btn.saved{background:var(--green)}
+.qt-module .save-btn:disabled{opacity:.65;cursor:wait}
 .qt-module .result-actions{display:flex;gap:10px}
 .qt-module .warn-box{background:#f59e0b12;border:1px solid #f59e0b30;border-radius:8px;padding:10px 14px;color:#fcd34d;font-size:12px;margin-bottom:14px}
 .qt-module .modal-overlay{position:absolute;inset:0;background:#000a;z-index:200;display:flex;align-items:center;justify-content:center;padding:20px}

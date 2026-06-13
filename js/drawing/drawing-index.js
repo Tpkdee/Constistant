@@ -8,7 +8,10 @@ import { qt_callGeminiParts } from './drawing-gemini.js';
 import { qt_normalizeGeminiResponse } from './drawing-parser.js';
 import { qt_renderReview, qt_setStatus, qt_setProgress, qt_showError, qt_hideError, qt_setPhase, qt_goBack, qt_goReview, qt_getActiveChips, qt_toggleChip, qt_toggleCalcChip, qt_getCalcOptions, qt_updateField, qt_setStirrupType, qt_setSecStirrupType, qt_addLengthGroup, qt_removeLengthGroup, qt_addSection, qt_deleteElement, qt_addElement } from './drawing-ui.js';
 import { qt_initSteelGlobals, qt_runCalculate, qt_copyResult } from './drawing-calc.js';
-import './drawing-bridge.js'; // registers window.qt_saveExtractionToProject (QT output -> schema entities)
+import { qt_saveExtractionToProject } from './drawing-bridge.js';
+import { createDrawingUpload } from '../shared/schema.js';
+import { runPipeline, STORAGE_KEYS } from '../shared/pipeline.js';
+import { getCurrentProjectId, projectStorageKey } from '../shared/project-store.js';
 
 async function qt_mountPanel() {
   const mount = document.getElementById('qt-module');
@@ -152,6 +155,60 @@ export async function qt_runRead() {
   }
 }
 
+/**
+ * บันทึกผลอ่านแบบ (qt_elementsData) เข้าโปรเจกต์ปัจจุบัน — สร้าง beam_library +
+ * drawing_elements ผ่าน drawing-bridge.js, บันทึก drawing_upload record (ให้ขึ้นใน
+ * sidebar) แล้วรัน pipeline ใหม่ทั้งหมด (BOQ/BBS/Planner/Resource/Readiness)
+ */
+export async function qt_saveToProject() {
+  const elementsData = globalThis.qt_elementsData || [];
+  if (!elementsData.length) { qt_showError('ไม่มีผลการอ่านแบบให้บันทึก'); return; }
+
+  const btn = document.getElementById('save-project-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...'; btn.classList.remove('saved'); }
+  qt_hideError();
+
+  try {
+    const projectId = getCurrentProjectId();
+    qt_saveExtractionToProject(projectId, { floorLevel: 'F1' });
+
+    const uploadsKey = projectStorageKey(STORAGE_KEYS.drawingUploads, projectId);
+    let uploads = [];
+    try {
+      const raw = localStorage.getItem(uploadsKey);
+      if (raw) uploads = JSON.parse(raw);
+      if (!Array.isArray(uploads)) uploads = [];
+    } catch (e) { uploads = []; }
+    uploads.unshift(createDrawingUpload({
+      id: crypto.randomUUID(),
+      project_id: projectId,
+      file_name: globalThis.qt_selectedFile?.name || 'Drawing Intelligence',
+      drawing_type: 'section_detail',
+      page_count: globalThis.qt_pdfPageDataUrls?.length || 1,
+      extraction_status: 'done',
+      sheet_type: 'section_detail',
+      sheet_confidence: null,
+      created_at: new Date().toISOString(),
+    }));
+    localStorage.setItem(uploadsKey, JSON.stringify(uploads));
+
+    await runPipeline();
+
+    if (btn) { btn.textContent = '✓ บันทึกแล้ว'; btn.classList.add('saved'); }
+  } catch (err) {
+    qt_showError(`บันทึกเข้าโปรเจกต์ไม่สำเร็จ: ${err.message}`);
+    if (btn) btn.textContent = '💾 บันทึกเข้าโปรเจกต์';
+  } finally {
+    if (btn) {
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = '💾 บันทึกเข้าโปรเจกต์';
+        btn.classList.remove('saved');
+      }, 2500);
+    }
+  }
+}
+
 export function qt_toggleKey() {
   const input = document.getElementById('api-key');
   if (!input) return;
@@ -203,6 +260,7 @@ window.qt_deleteElement = qt_deleteElement;
 window.qt_addElement = qt_addElement;
 window.qt_runCalculate = qt_runCalculate;
 window.qt_copyResult = qt_copyResult;
+window.qt_saveToProject = qt_saveToProject;
 
 globalThis.qt_setPhase = qt_setPhase;
 globalThis.qt_goBack = qt_goBack;
@@ -226,6 +284,7 @@ globalThis.qt_deleteElement = qt_deleteElement;
 globalThis.qt_addElement = qt_addElement;
 globalThis.qt_runCalculate = qt_runCalculate;
 globalThis.qt_copyResult = qt_copyResult;
+globalThis.qt_saveToProject = qt_saveToProject;
 
 qt_initSteelGlobals();
 await qt_mountPanel();
