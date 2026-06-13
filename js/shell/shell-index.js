@@ -2,12 +2,14 @@
  * Constistant shell — tab navigation, sidebar, project switcher, pipeline trigger.
  */
 
-import { runPipeline } from '../shared/pipeline.js';
+import { runPipeline, STORAGE_KEYS, PIPELINE_EVENT } from '../shared/pipeline.js';
 import {
   getProjects,
   getCurrentProjectId,
+  getCurrentProject,
   selectProject,
   addProject,
+  projectStorageKey,
   PROJECT_EVENT,
   DEMO_PROJECT_ID,
 } from '../shared/project-store.js';
@@ -95,11 +97,66 @@ function applyWizardTabGating() {
   });
 }
 
-function updateStatusSheet(sheetName) {
-  const status = document.getElementById('status-main');
-  const sheetText = sheetName || 'Sheet: ไม่ระบุ';
-  status.textContent = `Project: อาคาร A · ${sheetText} · Last sync: 2 min ago`;
-  document.getElementById('properties-sheet').textContent = sheetName;
+// แผ่นงานที่เลือกใน sidebar (สถานะ navigation จริง — ใช้ในแถบสถานะด้านล่าง)
+let currentSheet = 'Sheet S-101';
+
+const BUILDING_TYPE_LABEL = { residential: 'ที่อยู่อาศัย', commercial: 'อาคารพาณิชย์', mixed: 'อาคารผสม' };
+const PROJECT_STATUS_LABEL = { draft: 'ฉบับร่าง', active: 'กำลังดำเนินการ', completed: 'เสร็จสิ้น', on_hold: 'ระงับชั่วคราว' };
+
+// นับรายการ readiness ที่ยังไม่พร้อม (red/yellow) จากผลที่ pipeline เซฟไว้ (project-scoped)
+function loadReadinessCount() {
+  try {
+    const raw = localStorage.getItem(projectStorageKey(STORAGE_KEYS.readiness));
+    if (!raw) return null;
+    const checks = JSON.parse(raw);
+    if (!Array.isArray(checks) || checks.length === 0) return null;
+    const open = checks.filter(c => c.status === 'red' || c.status === 'yellow').length;
+    return { total: checks.length, open };
+  } catch (e) {
+    return null;
+  }
+}
+
+function renderStatusbar() {
+  const project = getCurrentProject();
+  const statusMain = document.getElementById('status-main');
+  if (statusMain) {
+    statusMain.textContent = `โปรเจกต์: ${project?.name || '-'} · ${currentSheet}`;
+  }
+  const tag = document.getElementById('status-tag');
+  if (tag) {
+    const rc = loadReadinessCount();
+    if (!rc) {
+      tag.textContent = 'ยังไม่มีผลตรวจความพร้อม';
+    } else if (rc.open === 0) {
+      tag.textContent = 'พร้อมดำเนินการ ✓';
+    } else {
+      tag.textContent = `${rc.open} รายการต้องติดตาม ⚠`;
+    }
+  }
+}
+
+// แสดงข้อมูลจริงของโปรเจกต์ที่เลือกอยู่ในแถบ Properties (ขวา) — อัปเดตเมื่อสลับโปรเจกต์
+function renderProperties() {
+  const body = document.getElementById('properties-body');
+  if (!body) return;
+  const p = getCurrentProject() || {};
+  const rows = [
+    ['ชื่อโครงการ', p.name],
+    ['เจ้าของโครงการ', p.client_name],
+    ['ประเภทอาคาร', BUILDING_TYPE_LABEL[p.building_type] || p.building_type],
+    ['จำนวนชั้น', p.floors_above_ground != null ? `${p.floors_above_ground} ชั้น` : null],
+    ['พื้นที่รวม', p.total_area_sqm ? `${p.total_area_sqm.toLocaleString('th-TH')} ตร.ม.` : null],
+    ['ที่ตั้ง', p.location_label],
+    ['วันที่เริ่มโครงการ', p.start_date],
+    ['สถานะ', PROJECT_STATUS_LABEL[p.status] || p.status],
+  ];
+  body.innerHTML = rows.map(([label, value]) => `
+    <div class="properties__field">
+      <span class="properties__field-label">${label}</span>
+      <div class="properties__field-value">${escapeHtml(value != null && value !== '' ? String(value) : '—')}</div>
+    </div>
+  `).join('');
 }
 
 function handleTabClick(event) {
@@ -111,8 +168,8 @@ function handleSidebarClick(event) {
   const item = event.currentTarget;
   document.querySelectorAll('.sidebar__item').forEach(i => i.classList.remove('sidebar__item--selected'));
   item.classList.add('sidebar__item--selected');
-  const sheetName = item.dataset.sheet || item.textContent.trim();
-  updateStatusSheet(sheetName);
+  currentSheet = item.dataset.sheet || item.textContent.trim();
+  renderStatusbar();
 }
 
 function escapeHtml(str) {
@@ -190,12 +247,17 @@ window.constistant_setActiveTab = setActiveTab;
 
 window.addEventListener(PROJECT_EVENT, () => {
   renderProjectSelect();
+  renderProperties();
+  renderStatusbar();
   const status = document.getElementById('pipeline-status');
   if (status) status.textContent = '';
   wz_checkAndShow(getCurrentProjectId());
   applyWizardTabGating();
   if (wz_isVisible()) setActiveTab('Overview');
 });
+
+// อัปเดตจำนวนรายการ readiness ในแถบสถานะหลังกด Calculate Project
+window.addEventListener(PIPELINE_EVENT, renderStatusbar);
 
 window.addEventListener(WIZARD_EVENT, () => {
   applyWizardTabGating();
@@ -205,8 +267,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', handleTabClick));
   document.querySelectorAll('.sidebar__item').forEach(item => item.addEventListener('click', handleSidebarClick));
   setActiveTab('Overview');
-  updateStatusSheet('Sheet S-101');
   renderProjectSelect();
+  renderProperties();
+  renderStatusbar();
+  // feature modules seed their own localStorage during their DOMContentLoaded (fires after
+  // this one); re-read once after the tick so the readiness count reflects seeded demo data
+  setTimeout(renderStatusbar, 0);
 
   wz_checkAndShow(getCurrentProjectId());
   applyWizardTabGating();
