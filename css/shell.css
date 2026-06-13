@@ -65,7 +65,29 @@ body {
 }
 
 .topbar__brand {
-  flex: 1;
+  font-weight: 700;
+}
+
+.topbar__nav {
+  display: flex;
+  gap: 4px;
+  margin-right: auto;
+  padding-left: 24px;
+}
+
+.topbar__nav-link {
+  color: var(--color-text-on-dark-mute);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.topbar__nav-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-on-dark);
 }
 
 .topbar__calc-wrap {
