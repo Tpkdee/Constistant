@@ -517,6 +517,10 @@ const SCHEDULE_TASKS = {
     get task_cost_estimate() {
       return parseFloat((this.crew_size * CREW_TYPES.steel_fixer.day_rate_thb * this.adjusted_duration_days).toFixed(2));
     },
+    percent_complete: 100,  // เสร็จแล้ว
+    get task_cost_actual() {
+      return parseFloat((this.task_cost_estimate * 1.05).toFixed(2)); // เกินงบเล็กน้อย
+    },
   }),
 
   // งานแบบหล่อเสาชั้น 1
@@ -552,6 +556,10 @@ const SCHEDULE_TASKS = {
     is_critical_path: true,
     get task_cost_estimate() {
       return parseFloat((this.crew_size * CREW_TYPES.carpenter.day_rate_thb * this.adjusted_duration_days).toFixed(2));
+    },
+    percent_complete: 100,  // เสร็จแล้ว
+    get task_cost_actual() {
+      return parseFloat((this.task_cost_estimate * 1.10).toFixed(2)); // ช่างไม้แบบใช้เวลาเกิน
     },
   }),
 
@@ -590,6 +598,10 @@ const SCHEDULE_TASKS = {
     get task_cost_estimate() {
       return parseFloat((this.crew_size * CREW_TYPES.concrete_gang.day_rate_thb * this.adjusted_duration_days).toFixed(2));
     },
+    percent_complete: 80,   // เทไปแล้วเกือบเสร็จ
+    get task_cost_actual() {
+      return parseFloat((this.task_cost_estimate * (this.percent_complete / 100) * 1.05).toFixed(2));
+    },
   }),
 
   // รอคอนกรีตแข็งตัว → เริ่มคานชั้น 2
@@ -625,6 +637,10 @@ const SCHEDULE_TASKS = {
     is_critical_path: true,
     get task_cost_estimate() {
       return parseFloat((this.crew_size * CREW_TYPES.steel_fixer.day_rate_thb * this.adjusted_duration_days).toFixed(2));
+    },
+    percent_complete: 30,   // เพิ่งเริ่มผูกเหล็กคาน
+    get task_cost_actual() {
+      return parseFloat((this.task_cost_estimate * (this.percent_complete / 100) * 1.15).toFixed(2));
     },
   }),
 

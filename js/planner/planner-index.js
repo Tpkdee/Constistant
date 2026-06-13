@@ -287,6 +287,8 @@ function renderGroupTable(group) {
             <th class="rh-num">ระยะเวลา (วัน)</th>
             <th class="rh-num">เผื่ออากาศ</th>
             <th class="rh-num">Crew</th>
+            <th class="rh-num">% เสร็จ</th>
+            <th class="rh-num">ใช้จริง (฿)</th>
             <th>Critical</th>
             <th></th>
           </tr>
@@ -307,6 +309,9 @@ function renderTaskRow(task) {
   const bufferCell = bufferDays > 0.04
     ? `${isRainy ? '🌧️ ' : ''}+${bufferDays.toFixed(1)}`
     : '—';
+  const pct = Math.max(0, Math.min(100, task.percent_complete || 0));
+  const estCost = task.task_cost_estimate;
+  const actualPlaceholder = estCost != null ? Math.round(estCost).toLocaleString('en-US') : 'ใช้จริง';
   return `
     <tr>
       <td>${escapeHtml(task.wbs_code)}</td>
@@ -320,6 +325,13 @@ function renderTaskRow(task) {
       <td class="rh-num">${duration ? duration.toFixed(1) : '-'}</td>
       <td class="rh-num"${isRainy ? ' style="color:#d97706;font-weight:600"' : ''} title="วันที่เผื่อไว้สำหรับสภาพอากาศ (adjusted − base)">${bufferCell}</td>
       <td class="rh-num">${task.crew_size ?? '-'}</td>
+      <td class="rh-num">
+        <div class="pl-progress" title="${pct}% เสร็จ">
+          <input type="number" class="pl-mini" min="0" max="100" step="5" value="${pct}" onchange="pl_updateProgress('${task.id}', this.value)">
+          <div class="pl-progress__bar"><span style="width:${pct}%"></span></div>
+        </div>
+      </td>
+      <td class="rh-num"><input type="number" class="pl-mini" min="0" step="any" value="${task.task_cost_actual ?? ''}" placeholder="${actualPlaceholder}" title="ค่าใช้จ่ายจริง — เว้นว่างถ้ายังไม่ทราบ" onchange="pl_updateActualCost('${task.id}', this.value)"></td>
       <td>${(task.is_critical || task.is_critical_path) ? '🔥 Critical' : '-'}</td>
       <td><button class="rh-delete" onclick="pl_deleteTask('${task.id}')" title="ลบกิจกรรม">✕</button></td>
     </tr>
@@ -383,6 +395,39 @@ export function pl_setGrouping(mode) {
   viewState.grouping_mode = mode;
   saveViewState(viewState);
   render();
+}
+
+/**
+ * อัปเดต % งานที่เสร็จจริงของ task (ขับเคลื่อน Earned Value บน Overview)
+ * บันทึกแล้ว broadcast PIPELINE_EVENT reason 'progress-changed' ให้ Overview re-render S-curve/SPI/CPI
+ */
+export function pl_updateProgress(id, value) {
+  const task = tasks.find(t => t.id === id);
+  if (!task) return;
+  task.percent_complete = Math.max(0, Math.min(100, parseFloat(value) || 0));
+  saveTasks(tasks);
+  broadcastProgress();
+  render();
+}
+
+/**
+ * อัปเดตค่าใช้จ่ายจริงของ task (ขับเคลื่อน CPI / Actual Cost บน Overview)
+ * เว้นว่าง = ยังไม่ทราบ → EVM จะถือ AC = EV สำหรับ task นั้น (CPI ไม่เพี้ยน)
+ */
+export function pl_updateActualCost(id, value) {
+  const task = tasks.find(t => t.id === id);
+  if (!task) return;
+  const num = parseFloat(value);
+  task.task_cost_actual = (value === '' || Number.isNaN(num)) ? null : num;
+  saveTasks(tasks);
+  broadcastProgress();
+  render();
+}
+
+function broadcastProgress() {
+  window.dispatchEvent(new CustomEvent(PIPELINE_EVENT, {
+    detail: { schedule: tasks, reason: 'progress-changed' },
+  }));
 }
 
 /**
@@ -455,6 +500,8 @@ window.pl_addTask = pl_addTask;
 window.pl_deleteTask = pl_deleteTask;
 window.pl_setGrouping = pl_setGrouping;
 window.pl_updateTaskDate = pl_updateTaskDate;
+window.pl_updateProgress = pl_updateProgress;
+window.pl_updateActualCost = pl_updateActualCost;
 
 document.addEventListener('DOMContentLoaded', () => {
   tasks = loadTasks();

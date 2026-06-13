@@ -14,7 +14,7 @@ import {
   PROJECT_EVENT,
 } from '../shared/project-store.js';
 import { STORAGE_KEYS, PIPELINE_EVENT } from '../shared/pipeline.js';
-import { groupTasksByMode } from '../shared/timeline-engine.js';
+import { groupTasksByMode, computeEVM } from '../shared/timeline-engine.js';
 
 const ELEMENT_TYPES = ['column', 'beam', 'girder', 'slab', 'footing', 'staircase'];
 const ELEMENT_LABEL = { column: 'เสา (Column)', beam: 'คาน (Beam)', girder: 'คานหลัก (Girder)', slab: 'พื้น (Slab)', footing: 'ฐานราก (Footing)', staircase: 'บันได (Staircase)' };
@@ -29,7 +29,7 @@ const BUDGET_REASON_LABEL = {
   compressed_schedule: 'อัดระยะเวลา — ต้องเพิ่มทีมงาน/ทำงานล่วงเวลา',
 };
 
-let charts = { boq: null, schedule: null };
+let charts = { boq: null, schedule: null, scurve: null };
 
 // ─────────────────────────────────────────────
 // Data loading (pipeline output -> demo-seed fallback -> empty)
@@ -191,6 +191,7 @@ function render() {
   const scheduleByFloor = computeScheduleByFloor(schedule);
   const elementSummary = computeElementSummary(elements, boq);
   const workBreakdown = computeWorkBreakdown(schedule);
+  const evm = computeEVM(schedule);
 
   const ragColor = RAG_COLOR[rag.overall];
   const lastUpdated = readiness.reduce((latest, c) => {
@@ -231,6 +232,8 @@ function render() {
         <div class="ov-kpi-value">฿${formatTHB(kpis.totalCost)}</div>
       </div>
     </div>
+
+    ${renderEVMCard(evm)}
 
     ${renderBudgetCard(projectConfig)}
 
@@ -293,7 +296,71 @@ function render() {
     </div>
   `;
 
-  renderCharts(breakdown, scheduleByFloor);
+  renderCharts(breakdown, scheduleByFloor, evm);
+}
+
+// ผลงานตามมูลค่า (Earned Value Management) — SPI/CPI + S-curve จาก schedule_tasks
+// SPI = EV/PV (เร็ว/ช้ากว่าแผน) · CPI = EV/AC (ต่ำ/เกินงบ)
+function perfBadge(value) {
+  if (value == null) return { color: '#94A3B8', tone: 'ยังไม่มีข้อมูล' };
+  if (value >= 1.0) return { color: '#22C55E', tone: 'ดีกว่าแผน' };
+  if (value >= 0.9) return { color: '#F59E0B', tone: 'ต้องเฝ้าระวัง' };
+  return { color: '#EF4444', tone: 'ต่ำกว่าแผน' };
+}
+
+function renderEVMCard(evm) {
+  if (!evm) return '';
+
+  if (evm.not_started) {
+    return `
+      <div class="fp-card">
+        <h2>ผลงานตามมูลค่า (Earned Value)</h2>
+        <p class="fp-empty">ยังไม่เริ่มงานตามแผน — เมื่อกรอก % เสร็จของกิจกรรมใน Planner ระบบจะคำนวณ SPI/CPI และวาดกราฟ S-curve ให้</p>
+      </div>
+    `;
+  }
+
+  const spiBadge = perfBadge(evm.spi);
+  const cpiBadge = perfBadge(evm.cpi);
+  const vacColor = evm.vac >= 0 ? '#22C55E' : '#EF4444';
+  const vacSign = evm.vac > 0 ? '+' : evm.vac < 0 ? '−' : '';
+
+  // สรุปเป็นภาษาคน
+  const schedWord = evm.spi == null ? '' : evm.spi >= 1 ? 'เร็วกว่าแผน' : 'ช้ากว่าแผน';
+  const costWord = evm.cpi == null ? '' : evm.cpi >= 1 ? 'ต่ำกว่างบ' : 'เกินงบ';
+  const summary = `งานคืบหน้า ${evm.percent_complete}% (มูลค่างานที่ทำได้ ฿${formatTHB(evm.ev)} จากงบรวม ฿${formatTHB(evm.bac)})` +
+    `${schedWord ? ` · ${schedWord} (SPI ${evm.spi})` : ''}${costWord ? ` · ${costWord} (CPI ${evm.cpi})` : ''}` +
+    ` · คาดต้นทุนเมื่อเสร็จ ฿${formatTHB(evm.eac)}`;
+
+  return `
+    <div class="fp-card">
+      <h2>ผลงานตามมูลค่า (Earned Value) — ณ ${new Date(evm.status_date).toLocaleDateString('th-TH')}</h2>
+      <div class="ov-budget-grid">
+        <div class="ov-budget-cell">
+          <div class="ov-budget__label">ดัชนีเวลา (SPI)</div>
+          <div class="ov-budget__value" style="color:${spiBadge.color}">${evm.spi ?? '—'}</div>
+          <div class="ov-evm__tone" style="color:${spiBadge.color}">${spiBadge.tone}</div>
+        </div>
+        <div class="ov-budget-cell">
+          <div class="ov-budget__label">ดัชนีต้นทุน (CPI)</div>
+          <div class="ov-budget__value" style="color:${cpiBadge.color}">${evm.cpi ?? '—'}</div>
+          <div class="ov-evm__tone" style="color:${cpiBadge.color}">${cpiBadge.tone}</div>
+        </div>
+        <div class="ov-budget-cell">
+          <div class="ov-budget__label">ความคืบหน้า</div>
+          <div class="ov-budget__value">${evm.percent_complete}%</div>
+          <div class="ov-evm__bar"><span style="width:${Math.min(100, evm.percent_complete)}%"></span></div>
+        </div>
+        <div class="ov-budget-cell">
+          <div class="ov-budget__label">ส่วนต่างเมื่อเสร็จ (VAC)</div>
+          <div class="ov-budget__value" style="color:${vacColor}">${vacSign}฿${formatTHB(Math.abs(evm.vac))}</div>
+          <div class="ov-evm__tone">${evm.vac >= 0 ? 'คาดประหยัด' : 'คาดเกินงบ'}</div>
+        </div>
+      </div>
+      <p class="ov-budget__reason">${escapeHtml(summary)}</p>
+      <div class="ov-evm__chart"><canvas id="ov-scurve-chart"></canvas></div>
+    </div>
+  `;
 }
 
 // ผลกระทบต่องบประมาณจากไทม์ไลน์ (จาก project_config.budget_impact — อัปเดตเมื่อแก้วันที่ใน Planner)
@@ -366,9 +433,33 @@ function destroyCharts() {
   });
 }
 
-function renderCharts(breakdown, scheduleByFloor) {
+function renderCharts(breakdown, scheduleByFloor, evm) {
   destroyCharts();
   if (typeof Chart === 'undefined') return;
+
+  const scurveCanvas = document.getElementById('ov-scurve-chart');
+  if (scurveCanvas && evm && evm.series?.length) {
+    charts.scurve = new Chart(scurveCanvas, {
+      type: 'line',
+      data: {
+        labels: evm.series.map(p => new Date(p.date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })),
+        datasets: [
+          { label: 'แผน (PV)', data: evm.series.map(p => p.pv), borderColor: '#64748B', borderDash: [6, 4], backgroundColor: 'transparent', tension: 0.3, pointRadius: 0 },
+          { label: 'ทำได้ (EV)', data: evm.series.map(p => p.ev), borderColor: '#2563EB', backgroundColor: '#2563EB14', fill: true, tension: 0.3, pointRadius: 0, spanGaps: false },
+          { label: 'จ่ายจริง (AC)', data: evm.series.map(p => p.ac), borderColor: '#EF4444', backgroundColor: 'transparent', tension: 0.3, pointRadius: 0, spanGaps: false },
+        ],
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ฿${formatTHB(ctx.raw)}` } },
+        },
+        scales: { y: { beginAtZero: true, ticks: { callback: (v) => '฿' + (v / 1000).toFixed(0) + 'k' } } },
+      },
+    });
+  }
 
   const boqCanvas = document.getElementById('ov-boq-chart');
   if (boqCanvas) {

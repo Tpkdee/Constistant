@@ -250,6 +250,106 @@ export function calculateBudgetImpact(baselineTimeline, userStartDate, userEndDa
 }
 
 // ─────────────────────────────────────────────
+// computeEVM — Earned Value Management
+// ─────────────────────────────────────────────
+
+function round2(n) {
+  return Math.round((n || 0) * 100) / 100;
+}
+
+/**
+ * fraction ของงานที่ "ควร" เสร็จตามแผน ณ วันที่ d (linear ระหว่าง start→end)
+ */
+function plannedFraction(task, d) {
+  const s = new Date(task.start_date);
+  const e = new Date(task.end_date);
+  if (d <= s) return 0;
+  if (d >= e) return 1;
+  const span = e - s;
+  return span > 0 ? (d - s) / span : 1;
+}
+
+/**
+ * คำนวณ Earned Value Management จาก schedule_tasks
+ *
+ *   PV (Planned Value)   = Σ task_cost_estimate × planned% ตามวันที่ ณ status date
+ *   EV (Earned Value)    = Σ task_cost_estimate × percent_complete
+ *   AC (Actual Cost)     = Σ task_cost_actual (ถ้าไม่มี → ใช้ EV ของ task นั้น = ไม่ทราบส่วนเกิน)
+ *   BAC (Budget At Completion) = Σ task_cost_estimate
+ *   SPI = EV / PV (>1 เร็วกว่าแผน) · CPI = EV / AC (>1 ต่ำกว่างบ)
+ *   EAC (Estimate At Completion) = BAC / CPI · VAC = BAC − EAC
+ *
+ * S-curve series: cumulative PV เต็มช่วงโครงการ; EV/AC วาดถึง status date เท่านั้น
+ * โดย scale ตามอัตราส่วนผลงานจริงต่อแผน ณ status (สม่ำเสมอตามรูปทรงแผน)
+ *
+ * @param {Array} tasks - schedule_tasks (ต้องมี start_date/end_date/task_cost_estimate)
+ * @param {Date|string} [statusDate] - วันที่ตัดยอด (default = วันนี้)
+ * @returns {object|null} null ถ้าไม่มี task ที่มีต้นทุน+วันที่
+ */
+export function computeEVM(tasks, statusDate = new Date()) {
+  const costed = (tasks || []).filter(t => (t.task_cost_estimate || 0) > 0 && t.start_date && t.end_date);
+  if (!costed.length) return null;
+
+  const status = statusDate instanceof Date ? statusDate : new Date(statusDate);
+
+  const bac = costed.reduce((s, t) => s + (t.task_cost_estimate || 0), 0);
+  const pvNow = costed.reduce((s, t) => s + (t.task_cost_estimate || 0) * plannedFraction(t, status), 0);
+  const evNow = costed.reduce((s, t) => s + (t.task_cost_estimate || 0) * ((t.percent_complete || 0) / 100), 0);
+  const acNow = costed.reduce((s, t) => {
+    const ac = t.task_cost_actual != null
+      ? t.task_cost_actual
+      : (t.task_cost_estimate || 0) * ((t.percent_complete || 0) / 100); // ไม่มี actual → AC = EV (CPI=1)
+    return s + ac;
+  }, 0);
+
+  const notStarted = pvNow < 1 && evNow < 1;
+  const spi = pvNow > 0 ? evNow / pvNow : null;
+  const cpi = acNow > 0 ? evNow / acNow : null;
+  const eac = cpi && cpi > 0 ? bac / cpi : bac;
+  const percentComplete = bac > 0 ? (evNow / bac) * 100 : 0;
+
+  // S-curve buckets — ปรับ step ให้ได้ ~12 จุดไม่ว่าโครงการสั้นหรือยาว
+  const minStart = new Date(Math.min(...costed.map(t => +new Date(t.start_date))));
+  const maxEnd = new Date(Math.max(...costed.map(t => +new Date(t.end_date))));
+  const totalSpan = Math.max(maxEnd - minStart, 86400000);
+  const bucketMs = Math.max(86400000, totalSpan / 12);
+
+  const evRatio = pvNow > 0 ? evNow / pvNow : 0;
+  const acRatio = pvNow > 0 ? acNow / pvNow : 0;
+
+  const series = [];
+  for (let d = minStart.getTime(); ; d += bucketMs) {
+    const cur = new Date(Math.min(d, maxEnd.getTime()));
+    const pv = costed.reduce((s, t) => s + (t.task_cost_estimate || 0) * plannedFraction(t, cur), 0);
+    const past = cur <= status;
+    series.push({
+      date: toISODate(cur),
+      pv: round2(pv),
+      ev: past ? round2(pv * evRatio) : null,
+      ac: past ? round2(pv * acRatio) : null,
+    });
+    if (d >= maxEnd.getTime()) break;
+  }
+
+  return {
+    bac: round2(bac),
+    pv: round2(pvNow),
+    ev: round2(evNow),
+    ac: round2(acNow),
+    spi: spi != null ? parseFloat(spi.toFixed(2)) : null,
+    cpi: cpi != null ? parseFloat(cpi.toFixed(2)) : null,
+    eac: round2(eac),
+    vac: round2(bac - eac),
+    cost_variance: round2(evNow - acNow),       // CV — บวก=ต่ำกว่างบ
+    schedule_variance: round2(evNow - pvNow),   // SV — บวก=เร็วกว่าแผน
+    percent_complete: parseFloat(percentComplete.toFixed(1)),
+    status_date: toISODate(status),
+    not_started: notStarted,
+    series,
+  };
+}
+
+// ─────────────────────────────────────────────
 // groupTasksByMode
 // ─────────────────────────────────────────────
 

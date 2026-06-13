@@ -289,6 +289,9 @@ export function createScheduleTask(overrides = {}) {
     task_cost_estimate: null,    // float THB — crew_size × CREW_TYPES[trade].day_rate × adjusted_duration_days
     task_cost_actual: null,      // float THB | null — filled from payroll_entries (Resource Hub)
 
+    // NEW — progress tracking (Earned Value Management: EV = task_cost_estimate × percent_complete)
+    percent_complete: 0,         // float 0-100 — % งานที่ทำเสร็จจริงหน้างาน (ผู้ใช้กรอกใน Planner)
+
     created_at: null,
     ...overrides,
   };
