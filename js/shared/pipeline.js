@@ -35,6 +35,7 @@ import {
 } from './schema.js';
 import { getCurrentProject, getProjectElements, projectStorageKey } from './project-store.js';
 import { applyWeatherBuffer } from './timeline-engine.js';
+import { getConcretePrice, getFormworkPrice, getRebarPrice } from './price-config.js';
 
 export const PIPELINE_EVENT = 'constistant:pipeline-updated';
 
@@ -60,14 +61,11 @@ const COVER_MM = 25;            // concrete cover ทั่วไป
 const HOOK_MM = 75;             // hook ปลายปลอก (ต่อข้าง)
 const DEFAULT_FLOOR_HEIGHT_M = 3.0; // ใช้กับเสาที่ไม่มี span_length_m
 
-// ราคารวม (เหมา) ต่อหน่วย — อ้างอิงเดียวกับ demo-seed.js
-const CONCRETE_RATE_THB = { column: 4500, beam: 4500, slab: 4200, footing: 4000, staircase: 4500 };
-const FORMWORK_RATE_THB = { column: 280, beam: 260, slab: 240, footing: 200, staircase: 300 };
-const REBAR_RATE_THB_PER_KG = 34;
+// Note: All material prices now come from price-config.js (getConcretePrice, getRebarPrice, getFormworkPrice)
+// This ensures BOQ, Catalog, and Pipeline use the same single source of truth for pricing
 
-// ราคาเฉพาะ "วัสดุ" (สำหรับ Resource Hub แยกจากค่าแรง)
-const CONCRETE_MATERIAL_RATE_THB = { column: 3500, beam: 3500, slab: 3300, footing: 3200, staircase: 3500 };
-const FORMWORK_MATERIAL_RATE_THB = 150; // THB/m2 (ไม้แบบ)
+// Note: Material cost breakdown (Resource Hub) — extracted from total price via price-config
+// For example: if formwork = 280 THB/m2, material portion ≈ 150-180 THB/m2 (rest is labor/overhead)
 
 // ค่าแรงรายวัน (THB/person-day)
 const LABOR_RATE_THB = { rebar: 550, formwork: 500, concrete: 450 };
@@ -154,7 +152,11 @@ export function computeBOQ(elements, beamLibraryById, project) {
 
     // flag รายการที่อ่านจากแบบด้วยความมั่นใจต่ำ ให้ตรวจสอบก่อนสั่งวัสดุ
     const status = (el.confidence_score ?? 1) < 0.75 ? 'needs_review' : 'ok';
+    const concreteRate = getConcretePrice(240);
+    const formworkRate = getFormworkPrice(type);
+    const rebarRate = getRebarPrice(lib.steel_grade || 'SD40', dia);
 
+    const concretePrice_thb = concreteRate?.price || 2470.60; // fallback to CGD 240 ksc
     boqItems.push(createBOQItem({
       id: `${idBase}-concrete`,
       project_id: project.id,
@@ -164,17 +166,18 @@ export function computeBOQ(elements, beamLibraryById, project) {
       work_category: 'concrete',
       unit: 'm3',
       quantity: concreteQty,
-      unit_rate_thb: CONCRETE_RATE_THB[type] ?? 4500,
-      amount_thb: parseFloat((concreteQty * (CONCRETE_RATE_THB[type] ?? 4500)).toFixed(2)),
+      unit_rate_thb: concretePrice_thb,
+      amount_thb: parseFloat((concreteQty * concretePrice_thb).toFixed(2)),
       floor_level: el.floor_level,
       element_type: type,
       status,
       work_type: workType,
       category_code: categoryInfo.category_code,
       category_label_th: categoryInfo.category_label_th,
-      unit_price_source: 'bq_standard_2567',
+      unit_price_source: concreteRate?.source || 'cgd_2026',
     }));
 
+    const rebarPrice_thb = rebarRate?.price || 18.50; // fallback to CGD SD40 DB16
     boqItems.push(createBOQItem({
       id: `${idBase}-rebar`,
       project_id: project.id,
@@ -184,17 +187,18 @@ export function computeBOQ(elements, beamLibraryById, project) {
       work_category: 'rebar',
       unit: 'kg',
       quantity: rebarQty,
-      unit_rate_thb: REBAR_RATE_THB_PER_KG,
-      amount_thb: parseFloat((rebarQty * REBAR_RATE_THB_PER_KG).toFixed(2)),
+      unit_rate_thb: rebarPrice_thb,
+      amount_thb: parseFloat((rebarQty * rebarPrice_thb).toFixed(2)),
       floor_level: el.floor_level,
       element_type: type,
       status,
       work_type: workType,
       category_code: categoryInfo.category_code,
       category_label_th: categoryInfo.category_label_th,
-      unit_price_source: 'bq_standard_2567',
+      unit_price_source: rebarRate?.source || 'cgd_2026',
     }));
 
+    const formworkPrice_thb = formworkRate?.price || 280; // fallback to CGD column formwork
     boqItems.push(createBOQItem({
       id: `${idBase}-formwork`,
       project_id: project.id,
@@ -204,15 +208,15 @@ export function computeBOQ(elements, beamLibraryById, project) {
       work_category: 'formwork',
       unit: 'm2',
       quantity: formworkAreaM2,
-      unit_rate_thb: FORMWORK_RATE_THB[type] ?? 250,
-      amount_thb: parseFloat((formworkAreaM2 * (FORMWORK_RATE_THB[type] ?? 250)).toFixed(2)),
+      unit_rate_thb: formworkPrice_thb,
+      amount_thb: parseFloat((formworkAreaM2 * formworkPrice_thb).toFixed(2)),
       floor_level: el.floor_level,
       element_type: type,
       status,
       work_type: workType,
       category_code: categoryInfo.category_code,
       category_label_th: categoryInfo.category_label_th,
-      unit_price_source: 'bq_standard_2567',
+      unit_price_source: formworkRate?.source || 'cgd_2026',
     }));
   }
 
@@ -506,6 +510,7 @@ function computeResources(boqItems, scheduleTasks, project) {
   });
 
   if (totalRebarKg > 0) {
+    const rebarPrice = getRebarPrice('SD40', 16)?.price || 18.50;
     items.push(createResourceItem({
       id: 'res-material-rebar',
       project_id: project.id,
@@ -513,13 +518,15 @@ function computeResources(boqItems, scheduleTasks, project) {
       name: 'เหล็กเสริมคอนกรีต (รวมทุกขนาด)',
       unit: 'kg',
       quantity: parseFloat(totalRebarKg.toFixed(2)),
-      unit_cost_thb: REBAR_RATE_THB_PER_KG,
-      total_cost_thb: parseFloat((totalRebarKg * REBAR_RATE_THB_PER_KG).toFixed(2)),
+      unit_cost_thb: rebarPrice,
+      total_cost_thb: parseFloat((totalRebarKg * rebarPrice).toFixed(2)),
       supplier_id: null,
     }));
   }
 
   if (totalFormworkM2 > 0) {
+    const formworkPrice = getFormworkPrice('beam')?.price || 280;
+    const materialPortion = formworkPrice * 0.55; // estimate 55% material, 45% labor/overhead
     items.push(createResourceItem({
       id: 'res-material-formwork',
       project_id: project.id,
@@ -527,8 +534,8 @@ function computeResources(boqItems, scheduleTasks, project) {
       name: 'ไม้แบบหล่อ + อุปกรณ์ค้ำยัน',
       unit: 'm2',
       quantity: parseFloat(totalFormworkM2.toFixed(2)),
-      unit_cost_thb: FORMWORK_MATERIAL_RATE_THB,
-      total_cost_thb: parseFloat((totalFormworkM2 * FORMWORK_MATERIAL_RATE_THB).toFixed(2)),
+      unit_cost_thb: parseFloat(materialPortion.toFixed(2)),
+      total_cost_thb: parseFloat((totalFormworkM2 * materialPortion).toFixed(2)),
       supplier_id: null,
     }));
   }

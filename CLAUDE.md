@@ -45,7 +45,7 @@ projects
 - `demo-seed.js` — demo project seed data via `getDemoDataByEngine(engine)`
 - `pipeline.js` — `runPipeline()`: BOQ → BBS → schedule → resources → readiness; fires `PIPELINE_EVENT`
 - `project-store.js` — multi-project localStorage via `projectStorageKey()`; fires `PROJECT_EVENT`
-- `timeline-engine.js` — duration estimation, budget impact, task grouping, weather buffer
+- `timeline-engine.js` — duration estimation, budget impact, task grouping, weather buffer, `computeEVM()` (Earned Value Management: SPI/CPI/EAC/VAC + S-curve series from `schedule_tasks.percent_complete`/`task_cost_actual`)
 
 ### Feature modules (one folder per tab)
 | Folder | Tab / page | Prefix |
@@ -61,6 +61,13 @@ projects
 | `js/catalog/` | Material Catalog page | — |
 
 Drawing Intelligence loads its UI from `templates/drawing/quantitake-panel.html` at runtime via `drawing-index.js` → `qt_mountPanel()`.
+
+### Planner (`js/planner/`) — site-engineer overview
+Page is overview-first: header status strip (activity/critical counts, total days, project end date, SPI/CPI pills via `computeEVM()`, overall % -complete bar) → HTML-grid Gantt → editable task table → add-activity form.
+- Gantt is an HTML grid (`.gantt2*` classes in `css/feature-panels.css`), not SVG — left label column + month axis row + per-task lane, with percent-complete fill, critical-path outline, weather-risk hatch, rainy-season band overlays, and a today-line.
+- Click any Gantt bar → `pl_showDetail(id)` opens a `.modal-overlay`/`.pl-detail` modal with the full task record (`renderDetailModal`); `pl_closeDetail()` closes it. State held in module-level `openDetailId`.
+- Editing `% เสร็จ` / `ใช้จริง (฿)` in the task table calls `pl_updateProgress`/`pl_updateActualCost`, which persist and dispatch `PIPELINE_EVENT` (`reason: 'progress-changed'`) so Overview's EVM card re-renders live.
+- `loadProjectConfig()` falls back to `getDemoProject().project_config` when the current project is `DEMO_PROJECT_ID` and localStorage has no saved config (keeps rainy-season overlay working out of the box).
 
 ### Module conventions
 - ES modules, but functions also attached to `window`/`globalThis` for inline `onclick` handlers.

@@ -4,28 +4,31 @@
 
 create table if not exists material_prices (
   id uuid primary key default gen_random_uuid(),
+  project_id uuid references projects(id) on delete cascade,
   user_id uuid references auth.users(id) on delete cascade,
 
-  -- Classification (3-axis taxonomy)
-  material_type text not null,     -- 'concrete' | 'rebar' | 'formwork' | 'masonry' | 'finishing' | 'mep'
-  material_subtype text,           -- e.g. 'ready_mix_concrete' | 'deformed_bar' | 'plywood_formwork'
-  brand text,                      -- e.g. 'SCG' | 'TPI' | 'Siam Steel' | null
-
-  -- Item details
-  trade_name text not null,        -- Thai/English product name
-  unit text not null,              -- 'm3' | 'kg' | 'ton' | 'm2' | 'piece' | 'set'
-  unit_price decimal(12,2),        -- THB
-  price_date date,                 -- date of quote
-  supplier_name text,
+  material_key text not null,
+  category text not null,
+  label_th text not null,
+  unit text not null,
+  price decimal(12,2) not null,
+  price_vat decimal(12,2),
+  source_code text not null default 'manual',
+  source_label text,
+  source_date date,
+  region text default 'central',
+  brand text,
   notes text,
-
-  -- Catalog source
-  catalog_source text default 'manual', -- 'manual' | 'import_csv' | 'catalog_scg' | 'catalog_tpi' | 'catalog_government' | 'catalog_sme'
-  is_active boolean default true,
-
+  uploaded_file text,
+  created_by uuid references auth.users(id),
   created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  updated_at timestamptz default now(),
+  is_active boolean default true
 );
+
+create index if not exists idx_material_prices_key on material_prices(material_key);
+create index if not exists idx_material_prices_project on material_prices(project_id);
+create index if not exists idx_material_prices_category on material_prices(category);
 
 create index if not exists material_prices_user_id_idx on material_prices(user_id);
 create index if not exists material_prices_type_unit_idx on material_prices(material_type, unit);

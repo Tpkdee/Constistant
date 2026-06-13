@@ -1,0 +1,13 @@
+@media print {
+  body * { visibility: hidden; }
+  #boq-print-root, #boq-print-root * { visibility: visible; }
+  #boq-print-root { position: absolute; left: 0; top: 0; width: 100%; }
+  .no-print { display: none !important; }
+  .boq-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+  .boq-table th, .boq-table td { border: 1px solid #333; padding: 4px 8px; }
+  .boq-category-header td { background: #d0d0d0; font-weight: bold; }
+  .boq-subtotal td { background: #e8e8e8; font-weight: bold; }
+  .boq-grand-total td { background: #1a4080; color: white; font-weight: bold; font-size: 12pt; }
+  .col-qty, .col-unit-price, .col-amount { font-family: 'IBM Plex Mono', monospace; text-align: right; }
+  @page { size: A4 landscape; margin: 15mm; }
+}

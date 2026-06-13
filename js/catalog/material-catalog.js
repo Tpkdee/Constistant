@@ -8,6 +8,8 @@
 
 import { CATALOG_PACKS } from './catalog-seed.js';
 import { parseCSV, exportToCSV, downloadCSV } from './csv-utils.js';
+import { getEffectivePrice, getPriceSourceInfo } from '../shared/price-config.js';
+import { uploadPriceFile, confirmAndSaveParsedPrices } from './price-file-parser.js';
 
 const DEMO_STORAGE_KEY = 'constistant_demo_material_prices_v1';
 const TABLE = 'material_prices';
@@ -290,8 +292,10 @@ function renderMyPricesTab() {
             <div class="mc-toolbar-actions">
               <button class="fp-btn-primary" onclick="materialCatalog.openModal()">+ เพิ่มรายการ</button>
               <button class="fp-btn-secondary" onclick="materialCatalog.triggerImportCSV()">นำเข้า CSV</button>
+              <button class="fp-btn-secondary" onclick="materialCatalog.uploadPriceFileInput()">📁 อัปโหลดราคาวัสดุ</button>
               <button class="fp-btn-secondary" onclick="materialCatalog.exportCSV()">ส่งออก CSV</button>
               <input type="file" id="mc-csv-input" accept=".csv" style="display:none" onchange="materialCatalog.handleCSVFile(this.files[0])" />
+              <input type="file" id="mc-price-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="materialCatalog.handlePriceFile(this.files[0])" />
             </div>
           </div>
 
@@ -326,6 +330,9 @@ function renderMyPricesTab() {
 }
 
 function renderPriceRow(p) {
+  const effective = getEffectivePrice(`${p.material_type || 'concrete'}.${p.material_subtype || 'ready_mix_240'}`);
+  const sourceInfo = getPriceSourceInfo(effective.source || p.catalog_source || 'manual');
+  const displayPrice = effective.price ?? p.unit_price ?? 0;
   return `
     <tr>
       <td>${typeLabel(p.material_type)}</td>
@@ -334,7 +341,8 @@ function renderPriceRow(p) {
       <td>${escapeHtml(p.trade_name)}</td>
       <td class="mc-mono">${escapeHtml(p.unit)}</td>
       <td class="ov-num mc-mono">
-        <input type="number" step="0.01" min="0" class="mc-inline-input" value="${p.unit_price ?? ''}"
+        <span style="color:${sourceInfo.color};font-weight:700">${sourceInfo.icon}</span>
+        <input type="number" step="0.01" min="0" class="mc-inline-input" value="${displayPrice ?? ''}"
           onchange="materialCatalog.updateField('${p.id}', 'unit_price', this.value)" />
       </td>
       <td>
@@ -342,7 +350,7 @@ function renderPriceRow(p) {
           onchange="materialCatalog.updateField('${p.id}', 'price_date', this.value)" />
       </td>
       <td>${escapeHtml(p.supplier_name || '-')}</td>
-      <td>${escapeHtml(sourceLabel(p.catalog_source))}</td>
+      <td>${escapeHtml(sourceLabel(p.catalog_source || effective.source))}</td>
       <td class="mc-actions">
         <button class="fp-btn-secondary" onclick="materialCatalog.openModal('${p.id}')" title="อัปเดตราคา">อัปเดตราคา</button>
         <button class="rh-delete" onclick="materialCatalog.deletePrice('${p.id}')" title="ลบรายการ">✕</button>
@@ -773,6 +781,23 @@ function triggerImportCSV() {
   document.getElementById('mc-csv-input')?.click();
 }
 
+function uploadPriceFileInput() {
+  document.getElementById('mc-price-input')?.click();
+}
+
+async function handlePriceFile(file) {
+  if (!file) return;
+  try {
+    const result = await uploadPriceFile(file);
+    const confirmed = confirmAndSaveParsedPrices(result.aiResult.mapped, result.aiResult);
+    alert(`อัปโหลดสำเร็จ: ${confirmed.overrides ? Object.keys(confirmed.overrides).length : 0} รายการ ถูกบันทึกลง localStorage`);
+    await refresh();
+  } catch (e) {
+    console.error('[catalog] price upload failed', e);
+    alert('อัปโหลดไฟล์ราคาล้มเหลว');
+  }
+}
+
 function handleCSVFile(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -840,6 +865,8 @@ export const materialCatalog = {
   setHistorySubtype,
   exportCSV,
   triggerImportCSV,
+  uploadPriceFileInput,
+  handlePriceFile,
   handleCSVFile,
   cancelImportCSV,
   confirmImportCSV,
