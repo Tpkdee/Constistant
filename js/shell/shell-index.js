@@ -24,6 +24,11 @@ const modulePlaceholders = {
     icon: '🗺️',
     mode: 'light',
   },
+  BBS: {
+    description: 'ตารางตัด-ดัดเหล็กเสริม (Bar Bending Schedule)',
+    icon: '🔩',
+    mode: 'light',
+  },
   'Readiness Check': {
     description: 'ตรวจสอบความพร้อมงานก่อสร้างและรายงานจุดที่ต้องแก้ไข',
     icon: '✅',
