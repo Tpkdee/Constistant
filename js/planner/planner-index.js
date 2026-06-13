@@ -285,6 +285,7 @@ function renderGroupTable(group) {
             <th>เริ่ม</th>
             <th>สิ้นสุด</th>
             <th class="rh-num">ระยะเวลา (วัน)</th>
+            <th class="rh-num">เผื่ออากาศ</th>
             <th class="rh-num">Crew</th>
             <th>Critical</th>
             <th></th>
@@ -300,6 +301,12 @@ function renderGroupTable(group) {
 
 function renderTaskRow(task) {
   const duration = task.adjusted_duration_days ?? task.base_duration_days ?? 0;
+  const base = task.base_duration_days ?? duration;
+  const bufferDays = Math.max(0, (task.adjusted_duration_days ?? base) - base);
+  const isRainy = task.weather_risk === 'high';
+  const bufferCell = bufferDays > 0.04
+    ? `${isRainy ? '🌧️ ' : ''}+${bufferDays.toFixed(1)}`
+    : '—';
   return `
     <tr>
       <td>${escapeHtml(task.wbs_code)}</td>
@@ -311,6 +318,7 @@ function renderTaskRow(task) {
       <td><input type="date" class="wz-input wz-input--narrow" value="${task.start_date || ''}" onchange="pl_updateTaskDate('${task.id}','start_date',this.value)"></td>
       <td><input type="date" class="wz-input wz-input--narrow" value="${task.end_date || ''}" onchange="pl_updateTaskDate('${task.id}','end_date',this.value)"></td>
       <td class="rh-num">${duration ? duration.toFixed(1) : '-'}</td>
+      <td class="rh-num"${isRainy ? ' style="color:#d97706;font-weight:600"' : ''} title="วันที่เผื่อไว้สำหรับสภาพอากาศ (adjusted − base)">${bufferCell}</td>
       <td class="rh-num">${task.crew_size ?? '-'}</td>
       <td>${(task.is_critical || task.is_critical_path) ? '🔥 Critical' : '-'}</td>
       <td><button class="rh-delete" onclick="pl_deleteTask('${task.id}')" title="ลบกิจกรรม">✕</button></td>
