@@ -7,6 +7,11 @@ import { getCurrentProject, getCurrentProjectId, projectStorageKey, DEMO_PROJECT
 import { getDemoDataByEngine } from '../shared/demo-seed.js';
 import { CREW_TYPES, EQUIPMENT_TYPES, EQUIPMENT_RATES, MATERIAL_LEAD_TIMES } from '../shared/schema.js';
 import { STORAGE_KEYS, PIPELINE_EVENT } from '../shared/pipeline.js';
+import {
+  rh_loadAvailableCrew, rh_saveAvailableCrew, rh_calculateDailyDemand,
+  rh_aggregateToWeekly, rh_checkOverallocation, rh_calculatePeakDemand,
+  rh_formatOverallocationWarning,
+} from './rh_manpower.js';
 
 const PLAN_KEY = 'constistant_resource_plan_v1';
 
@@ -59,6 +64,12 @@ export const rh_state = {
   equipment_cards: [],
   alerts: [],
   weekly_demand: [],
+  // NEW — manpower demand analytics
+  daily_demand: [],
+  weekly_demand_buckets: [],
+  available_crew: {},
+  overallocation_warnings: [],
+  peak_demand: {},
   kpi: {
     total_budget: 0,
     labor_pct: 0,
@@ -392,6 +403,13 @@ function rebuildState() {
   rh_state.weekly_demand = buildWeeklyDemand();
   rh_state.alerts = computeAlerts();
   rh_state.kpi = computeKPIs();
+
+  // NEW — manpower demand analytics
+  rh_state.available_crew = rh_loadAvailableCrew();
+  rh_state.daily_demand = rh_calculateDailyDemand(_scheduleTasks);
+  rh_state.weekly_demand_buckets = rh_aggregateToWeekly(rh_state.daily_demand);
+  rh_state.overallocation_warnings = rh_checkOverallocation(rh_state.daily_demand, rh_state.available_crew, _scheduleTasks);
+  rh_state.peak_demand = rh_calculatePeakDemand(rh_state.daily_demand);
 }
 
 // ─────────────────────────────────────────────
@@ -592,7 +610,15 @@ function renderManpowerTab() {
   if (rh_state.crew_cards.length === 0) {
     return `<div class="rh-empty">ยังไม่มีข้อมูลความต้องการแรงงานจากแผนงาน</div>`;
   }
-  return `<div class="rh-crew-grid">${rh_state.crew_cards.map(renderCrewCard).join('')}</div>`;
+
+  return `
+  <div style="display: flex; flex-direction: column; gap: 16px;">
+    ${renderPeakDemandCards()}
+    ${renderAvailableCrewTable()}
+    ${renderManpowerChart()}
+    ${renderOverallocationWarnings()}
+    <div class="rh-crew-grid">${rh_state.crew_cards.map(renderCrewCard).join('')}</div>
+  </div>`;
 }
 
 function renderMaterialRow(m) {
@@ -732,6 +758,182 @@ function renderChart() {
 }
 
 // ─────────────────────────────────────────────
+// Render: manpower demand analytics
+// ─────────────────────────────────────────────
+
+function renderPeakDemandCards() {
+  const p = rh_state.peak_demand;
+  if (!p.peak_date) {
+    return `
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+      <div class="rh-panel" style="opacity: 0.5; text-align: center; padding: 20px;">
+        <div style="color: var(--rh-gray-500); font-size: 12px;">ยังไม่มีข้อมูลความต้องการแรงงาน</div>
+      </div>
+    </div>`;
+  }
+
+  return `
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px;">
+    <div class="rh-card rh-card--amber">
+      <div class="rh-card__icon">📈</div>
+      <div class="rh-card__body">
+        <div class="rh-card__title">ยอดสูงสุดในสัปดาห์นี้</div>
+        <div style="font-size: 18px; font-weight: 700; color: var(--rh-gray-900);">${p.peak_headcount.toFixed(1)} คน</div>
+        <div style="font-size: 12px; color: var(--rh-gray-500); margin-top: 4px;">
+          ${p.peak_trade_label || '-'}<br>${p.peak_date ? new Date(p.peak_date).toLocaleDateString('th-TH') : '-'}
+        </div>
+      </div>
+    </div>
+    <div class="rh-card rh-card--blue">
+      <div class="rh-card__icon">👥</div>
+      <div class="rh-card__body">
+        <div class="rh-card__title">รวมคนวันทั้งโครงการ</div>
+        <div style="font-size: 18px; font-weight: 700; color: var(--rh-gray-900);">${p.total_person_days.toFixed(0)}</div>
+        <div style="font-size: 12px; color: var(--rh-gray-500); margin-top: 4px;">person-days</div>
+      </div>
+    </div>
+    <div class="rh-card rh-card--${rh_state.overallocation_warnings.length > 0 ? 'red' : 'green'}">
+      <div class="rh-card__icon">${rh_state.overallocation_warnings.length > 0 ? '⚠️' : '✓'}</div>
+      <div class="rh-card__body">
+        <div class="rh-card__title">${rh_state.overallocation_warnings.length > 0 ? 'มีการขาดแคลน' : 'ไม่มีปัญหา'}</div>
+        <div style="font-size: 18px; font-weight: 700; color: var(--rh-gray-900);">${rh_state.overallocation_warnings.length}</div>
+        <div style="font-size: 12px; color: var(--rh-gray-500); margin-top: 4px;">วันที่มีปัญหา</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderAvailableCrewTable() {
+  const rows = Object.entries(rh_state.available_crew)
+    .filter(([trade]) => CREW_TYPES[trade])
+    .map(([trade, count]) => {
+      const label = CREW_TYPES[trade]?.name_th || trade;
+      const icon = CREW_TYPES[trade]?.icon || '👷';
+      return `
+      <tr style="border-bottom: 1px solid var(--rh-gray-100);">
+        <td style="padding: 8px; text-align: center;">${icon}</td>
+        <td style="padding: 8px; font-weight: 600;">${label}</td>
+        <td style="padding: 8px;">
+          <input type="number" min="0" value="${count}" class="rh-input rh-input--num"
+            onchange="rh_updateAvailableCrew('${trade}', this.value)"
+            style="width: 70px; text-align: center;" />
+        </td>
+      </tr>`;
+    })
+    .join('');
+
+  return `
+  <div class="rh-panel" style="margin-bottom: 16px;">
+    <h3 class="rh-panel__title">แรงงานที่มีอยู่</h3>
+    <p style="font-size: 12px; color: var(--rh-gray-500); margin: 0 0 12px 0;">ค่าเริ่มต้นสำหรับโครงการขนาด SME — แก้ไขตามความเป็นจริง</p>
+    <table class="rh-table" style="width: 100%; font-size: 13px;">
+      <thead>
+        <tr style="border-bottom: 2px solid var(--rh-gray-300);">
+          <th style="padding: 8px; text-align: center;">ไอคอน</th>
+          <th style="padding: 8px;">สายงาน</th>
+          <th style="padding: 8px; text-align: right;">คน</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+function renderOverallocationWarnings() {
+  if (!rh_state.overallocation_warnings.length) {
+    return `
+    <div class="rh-panel">
+      <h3 class="rh-panel__title">คำเตือนการขาดแคลน</h3>
+      <div class="rh-empty rh-empty--ok">✓ ไม่มีปัญหาการขาดแคลนแรงงาน</div>
+    </div>`;
+  }
+
+  const warnings = rh_state.overallocation_warnings.map(w => `
+    <div class="rh-alert rh-alert--red" style="margin-bottom: 10px;">
+      <div class="rh-alert__detail">${rh_formatOverallocationWarning(w)}</div>
+      ${w.suggestion ? `<button class="rh-link" onclick="rh_applySuggestion('${w.suggestion.taskId}', ${w.suggestion.shiftDays})">นำไปใช้ →</button>` : ''}
+    </div>`).join('');
+
+  return `
+  <div class="rh-panel">
+    <h3 class="rh-panel__title">⚠️ คำเตือนการขาดแคลน (${rh_state.overallocation_warnings.length})</h3>
+    <div style="max-height: 300px; overflow-y: auto;">
+      ${warnings}
+    </div>
+  </div>`;
+}
+
+function renderManpowerChart() {
+  const weeks = rh_state.weekly_demand_buckets;
+  if (!weeks.length) return '';
+
+  const W = 600, H = 240, padBottom = 32, padTop = 20, padLeft = 50;
+  const maxTotal = Math.max(1, ...weeks.map(w => {
+    const sum = Object.values(w.by_type || {}).reduce((a, b) => a + b, 0);
+    return sum;
+  }));
+
+  // Build by_type from daily data
+  const weekData = new Map();
+  rh_state.daily_demand.forEach(day => {
+    const wk = day.date.substring(0, 7); // YYYY-MM
+    if (!weekData.has(wk)) {
+      weekData.set(wk, {});
+    }
+    const byType = weekData.get(wk);
+    byType[day.trade] = (byType[day.trade] || 0) + day.headcount_required;
+  });
+
+  const weekLabels = Array.from(weekData.keys()).sort();
+  const allTrades = new Set();
+  weekData.forEach(data => {
+    Object.keys(data).forEach(trade => allTrades.add(trade));
+  });
+
+  const trades = Array.from(allTrades).sort();
+  const barW = (W - padLeft - 10) / Math.max(1, weekLabels.length);
+
+  const bars = weekLabels.map((week, i) => {
+    const byType = weekData.get(week) || {};
+    let yOffset = H - padBottom;
+    const x = padLeft + i * barW + 4;
+
+    const segs = trades.map(trade => {
+      const val = byType[trade] || 0;
+      if (!val) return '';
+      const maxVal = Math.max(1, ...Array.from(weekData.values()).map(d => Object.values(d).reduce((a, b) => a + b, 0)));
+      const h = (val / maxVal) * (H - padTop - padBottom);
+      const color = CREW_CHART_COLORS[trade] || CREW_CHART_COLORS.other;
+      yOffset -= h;
+      return `<rect x="${x.toFixed(1)}" y="${yOffset.toFixed(1)}" width="${(barW - 8).toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" rx="2" />`;
+    }).join('');
+
+    const label = `<text x="${(x + (barW - 8) / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="var(--rh-gray-500)">${week.substring(5)}</text>`;
+    return segs + label;
+  }).join('');
+
+  const legend = trades.map(trade => `
+    <span class="rh-legend__item">
+      <span class="rh-legend__swatch" style="background:${CREW_CHART_COLORS[trade] || CREW_CHART_COLORS.other}"></span>
+      ${(CREW_TYPES[trade] && CREW_TYPES[trade].name_th) || trade}
+    </span>`).join('');
+
+  return `
+  <div class="rh-panel" style="margin-bottom: 16px;">
+    <h3 class="rh-panel__title">ความต้องการแรงงานรายเดือน (Stacked by Trade)</h3>
+    <svg viewBox="0 0 ${W} ${H}" class="rh-chart" preserveAspectRatio="xMidYMid meet" style="height: 260px;">
+      <line x1="${padLeft}" y1="${H - padBottom}" x2="${W - 4}" y2="${H - padBottom}" stroke="var(--rh-gray-300)" stroke-width="1" />
+      <text x="10" y="${H - padBottom - 10}" font-size="11" fill="var(--rh-gray-500)" text-anchor="middle">0</text>
+      <text x="10" y="${H - padBottom - (H - padTop - padBottom) / 2}" font-size="11" fill="var(--rh-gray-500)" text-anchor="middle">คน</text>
+      ${bars}
+    </svg>
+    <div class="rh-legend">${legend}</div>
+  </div>`;
+}
+
+// ─────────────────────────────────────────────
 // Render: onboarding
 // ─────────────────────────────────────────────
 
@@ -841,6 +1043,44 @@ export function rh_focusResource(category, id) {
   });
 }
 
+export function rh_updateAvailableCrew(trade, value) {
+  const count = Math.max(0, parseInt(value, 10) || 0);
+  rh_state.available_crew[trade] = count;
+  rh_saveAvailableCrew(rh_state.available_crew);
+  rebuildState();
+  render();
+}
+
+export function rh_applySuggestion(taskId, shiftDays) {
+  const task = _scheduleTasks.find(t => t.id === taskId);
+  if (!task) {
+    alert('ไม่พบงาน — อาจถูกลบแล้ว');
+    return;
+  }
+
+  if (!confirm(`เลื่อนงาน "${task.activity_name}" ออก ${shiftDays} วันหรือไม่?`)) {
+    return;
+  }
+
+  // Update task dates by adding shiftDays
+  const newStart = new Date(task.start_date);
+  newStart.setDate(newStart.getDate() + shiftDays);
+  task.start_date = newStart.toISOString().split('T')[0];
+
+  const newEnd = new Date(task.end_date);
+  newEnd.setDate(newEnd.getDate() + shiftDays);
+  task.end_date = newEnd.toISOString().split('T')[0];
+
+  // Persist changes
+  const storageKey = projectStorageKey(STORAGE_KEYS.schedule, getCurrentProjectId());
+  localStorage.setItem(storageKey, JSON.stringify(_scheduleTasks));
+
+  // Rebuild and re-render
+  rebuildState();
+  render();
+  alert(`✓ เลื่อนงาน "${task.activity_name}" สำเร็จ`);
+}
+
 export function rh_generateFromPlan() {
   loadData();
   if (_scheduleTasks.length === 0) {
@@ -865,6 +1105,8 @@ window.rh_updateEquipment = rh_updateEquipment;
 window.rh_focusResource = rh_focusResource;
 window.rh_generateFromPlan = rh_generateFromPlan;
 window.rh_init = rh_init;
+window.rh_updateAvailableCrew = rh_updateAvailableCrew;
+window.rh_applySuggestion = rh_applySuggestion;
 
 window.addEventListener(PROJECT_EVENT, rh_init);
 window.addEventListener(PIPELINE_EVENT, rh_init);
