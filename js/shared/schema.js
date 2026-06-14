@@ -240,6 +240,13 @@ export function createBBSItem(overrides = {}) {
  * @param {Partial<ScheduleTask>} overrides
  */
 export function createScheduleTask(overrides = {}) {
+  const inferredTrade = overrides.trade
+    || overrides.resource_group?.primary_trade
+    || overrides.resource_group?.crew_type
+    || (overrides.work_type === 'structure' ? 'concrete' : null);
+
+  const fallbackPercent = overrides.progress_pct ?? overrides.percent_complete ?? 0;
+
   return {
     id: null,                     // uuid
     project_id: null,             // uuid FK
@@ -248,6 +255,8 @@ export function createScheduleTask(overrides = {}) {
     activity_name: '',            // "Column Concrete Pour F1"
     work_category: null,          // 'structural' | 'architectural' | 'mep' | 'finishing'
     floor_level: null,
+    floor: overrides.floor ?? overrides.floor_level ?? null,
+    trade: inferredTrade,
     // ปริมาณงาน
     quantity: null,               // float
     unit: '',                     // 'm3' | 'kg' | 'm2'
@@ -290,7 +299,8 @@ export function createScheduleTask(overrides = {}) {
     task_cost_actual: null,      // float THB | null — filled from payroll_entries (Resource Hub)
 
     // NEW — progress tracking (Earned Value Management: EV = task_cost_estimate × percent_complete)
-    percent_complete: 0,         // float 0-100 — % งานที่ทำเสร็จจริงหน้างาน (ผู้ใช้กรอกใน Planner)
+    percent_complete: fallbackPercent, // float 0-100 — % งานที่ทำเสร็จจริงหน้างาน (ผู้ใช้กรอกใน Planner)
+    progress_pct: fallbackPercent,      // alias for UI that uses progress_pct
 
     created_at: null,
     ...overrides,
@@ -357,7 +367,11 @@ export function createSupplier(overrides = {}) {
     id: null,               // uuid
     project_id: null,       // uuid FK (null = global catalog)
     name: '',
+    category: 'other',      // 'steel' | 'concrete' | 'formwork' | 'other'
     material_types: [],     // string[] — ['rebar', 'cement', 'aggregate']
+    price_list: [],         // [{ item_name, unit, unit_price_thb }]
+    contact: null,          // { phone, email, line, person } | null
+    rating: null,           // float 0-5
     region: '',             // 'bangkok' | 'central' | 'north' | 'northeast' | 'south'
     contact_phone: null,
     contact_line: null,
@@ -367,6 +381,199 @@ export function createSupplier(overrides = {}) {
     ...overrides,
   };
 }
+
+/**
+ * ResourceAllocation — แผนการจัดสรรกำลังคนต่อวัน/งาน
+ *
+ * @param {Partial<ResourceAllocation>} overrides
+ * @returns {{id: string|null, project_id: string|null, task_id: string|null, trade: string, headcount_required: number, headcount_available: number, date: string|null, status: 'ok'|'overallocated'}}
+ */
+export function createResourceAllocation(overrides = {}) {
+  return {
+    id: null,
+    project_id: null,
+    task_id: null,
+    trade: 'other',
+    headcount_required: 0,
+    headcount_available: 0,
+    date: null,
+    status: 'ok',
+    ...overrides,
+  };
+}
+
+/**
+ * MaterialOrder — ใบสั่งวัสดุสำหรับ Resource Hub / procurement
+ *
+ * @param {Partial<MaterialOrder>} overrides
+ * @returns {{id: string|null, project_id: string|null, boq_item_id: string|null, supplier_id: string|null, material_name: string, quantity: number, unit: string, order_date: string|null, expected_delivery_date: string|null, lead_time_days: number, status: 'pending'|'ordered'|'delivered'}}
+ */
+export function createMaterialOrder(overrides = {}) {
+  return {
+    id: null,
+    project_id: null,
+    boq_item_id: null,
+    supplier_id: null,
+    material_name: '',
+    quantity: 0,
+    unit: 'kg',
+    order_date: null,
+    expected_delivery_date: null,
+    lead_time_days: 0,
+    status: 'pending',
+    ...overrides,
+  };
+}
+
+/**
+ * computeCriticalPath — คำนวณ critical path จาก predecessor chain
+ *
+ * @param {Array<{id: string, predecessor_task_ids?: string[], depends_on_task_ids?: string[], adjusted_duration_days?: number, base_duration_days?: number}>} scheduleTasks
+ * @returns {string[]} critical task IDs
+ */
+export function computeCriticalPath(scheduleTasks = []) {
+  const taskMap = new Map(scheduleTasks.map(task => [task.id, task]));
+  const duration = task => Number(task.adjusted_duration_days ?? task.base_duration_days ?? 0);
+  const preds = task => (task.predecessor_task_ids || task.depends_on_task_ids || []).filter(Boolean);
+  const succs = task => scheduleTasks.filter(other => preds(other).includes(task.id)).map(t => t.id);
+
+  const earliestStart = new Map();
+  const earliestFinish = new Map();
+
+  const visitForward = (taskId) => {
+    if (earliestFinish.has(taskId)) return;
+    const task = taskMap.get(taskId);
+    if (!task) return;
+
+    const predIds = preds(task);
+    if (predIds.length) {
+      predIds.forEach(visitForward);
+      earliestStart.set(taskId, predIds.reduce((max, id) => Math.max(max, earliestFinish.get(id) || 0), 0));
+    } else {
+      earliestStart.set(taskId, 0);
+    }
+
+    earliestFinish.set(taskId, (earliestStart.get(taskId) || 0) + duration(task));
+  };
+
+  scheduleTasks.forEach(task => visitForward(task.id));
+
+  const projectFinish = scheduleTasks.reduce((max, task) => Math.max(max, earliestFinish.get(task.id) || 0), 0);
+
+  const latestFinish = new Map();
+  const latestStart = new Map();
+  scheduleTasks.forEach(task => latestFinish.set(task.id, projectFinish));
+
+  const visitBackward = (taskId) => {
+    if (latestStart.has(taskId)) return;
+    const task = taskMap.get(taskId);
+    if (!task) return;
+
+    const nextIds = succs(task);
+    if (nextIds.length) {
+      const minNextStart = nextIds.reduce((min, id) => Math.min(min, latestStart.get(id) || projectFinish), projectFinish);
+      latestFinish.set(taskId, minNextStart);
+    }
+    latestStart.set(taskId, (latestFinish.get(taskId) || projectFinish) - duration(task));
+    nextIds.forEach(visitBackward);
+  };
+
+  scheduleTasks
+    .filter(task => !succs(task).length)
+    .forEach(task => visitBackward(task.id));
+
+  return scheduleTasks
+    .filter(task => {
+      const slack = (latestStart.get(task.id) || 0) - (earliestStart.get(task.id) || 0);
+      return Math.abs(slack) < 1e-9;
+    })
+    .map(task => task.id);
+}
+
+/**
+ * computeManpowerDemand — คำนวณความต้องการกำลังคนต่อวันจาก productivity rate
+ *
+ * @param {Array<{id: string, quantity?: number, unit?: string, trade?: string, resource_group?: {primary_trade?: string}, duration_days?: number, adjusted_duration_days?: number, base_duration_days?: number}>} scheduleTasks
+ * @param {Record<string, number>} productivityRates
+ * @returns {{date: string|null, trade: string, headcount_required: number}[]}
+ */
+export function computeManpowerDemand(scheduleTasks = [], productivityRates = PRODUCTIVITY_RATES) {
+  const byDate = new Map();
+
+  scheduleTasks.forEach(task => {
+    const date = task.start_date || null;
+    const trade = task.trade || task.resource_group?.primary_trade || task.resource_group?.crew_type || 'other';
+    const duration = Number(task.adjusted_duration_days ?? task.base_duration_days ?? task.duration_days ?? 1);
+    const volume = Number(task.quantity || 0);
+    const unit = String(task.unit || '').toLowerCase();
+    const rebarWeightFactor = unit === 'kg' && task.diameter_mm != null && REBAR_UNIT_WEIGHT[task.diameter_mm]
+      ? REBAR_UNIT_WEIGHT[task.diameter_mm]
+      : 1;
+
+    let rate = productivityRates[trade] ?? productivityRates[`${trade}_${unit}`] ?? null;
+
+    if (!rate) {
+      if (unit === 'kg') {
+        rate = productivityRates.column_rebar_kg ?? productivityRates.beam_rebar_kg ?? productivityRates.slab_rebar_kg ?? 1;
+      } else if (unit === 'm2') {
+        rate = productivityRates.formwork_column_m2 ?? productivityRates.formwork_beam_m2 ?? productivityRates.formwork_slab_m2 ?? 1;
+      } else if (unit === 'm3') {
+        rate = productivityRates.column_concrete_m3 ?? productivityRates.beam_concrete_m3 ?? productivityRates.slab_concrete_m3 ?? 1;
+      }
+    }
+
+    const normalizedVolume = unit === 'kg' ? volume / rebarWeightFactor : volume;
+    const headcount = duration > 0 && rate > 0 ? normalizedVolume / (duration * rate) : 0;
+    const key = `${date || 'unknown'}::${trade}`;
+    const current = byDate.get(key) || { date, trade, headcount_required: 0 };
+    current.headcount_required = parseFloat((current.headcount_required + headcount).toFixed(2));
+    byDate.set(key, current);
+  });
+
+  return Array.from(byDate.values()).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+}
+
+/*
+SQL migration snippet (Supabase-style):
+
+create table if not exists public.resource_allocations (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references public.projects(id) on delete cascade,
+  task_id uuid references public.schedule_tasks(id) on delete cascade,
+  trade text not null default 'other',
+  headcount_required numeric not null default 0,
+  headcount_available numeric not null default 0,
+  date date,
+  status text not null default 'ok',
+  created_at timestamptz default now()
+);
+
+create table if not exists public.material_orders (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references public.projects(id) on delete cascade,
+  boq_item_id uuid references public.boq_items(id) on delete set null,
+  supplier_id uuid references public.suppliers(id) on delete set null,
+  material_name text not null,
+  quantity numeric not null default 0,
+  unit text not null default 'kg',
+  order_date date,
+  expected_delivery_date date,
+  lead_time_days integer default 0,
+  status text not null default 'pending',
+  created_at timestamptz default now()
+);
+
+create table if not exists public.suppliers (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references public.projects(id) on delete cascade,
+  name text not null,
+  category text not null default 'other',
+  price_list jsonb not null default '[]'::jsonb,
+  contact jsonb,
+  rating numeric,
+  created_at timestamptz default now()
+);
+*/
 
 /**
  * PayrollEntry — ค่าแรงรายวัน สำหรับ Resource Hub

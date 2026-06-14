@@ -27,6 +27,8 @@ import {
   createScheduleTask,
   createWeatherSnapshot,
   createResourceItem,
+  createResourceAllocation,
+  createMaterialOrder,
   createSupplier,
   createPayrollEntry,
   createReadinessCheck,
@@ -676,13 +678,95 @@ const DEMO_SUPPLIER = createSupplier({
   id: 'supplier-001',
   project_id: PROJECT.id,
   name: 'บริษัท เหล็กดีไทย จำกัด',
+  category: 'steel',
   material_types: ['rebar'],
+  price_list: [
+    { item_name: 'DB16 SD30', unit: 'kg', unit_price_thb: 34 },
+    { item_name: 'DB12 SD30', unit: 'kg', unit_price_thb: 31 },
+  ],
+  contact: { phone: '02-xxx-xxxx', line: '@steelthai', person: 'คุณพิมพ์' },
+  rating: 4.7,
   region: 'bangkok',
   contact_phone: '02-xxx-xxxx',
   contact_line: '@steelthai',
   credit_days: 30,
   min_order_ton: 2,
 });
+
+const RESOURCE_ALLOCATIONS = {
+  alloc_rebar_f1: createResourceAllocation({
+    id: 'alloc-rebar-f1',
+    project_id: PROJECT.id,
+    task_id: SCHEDULE_TASKS.rebar_col_F1.id,
+    trade: 'rebar',
+    headcount_required: 4,
+    headcount_available: 2,
+    date: '2025-09-01',
+    status: 'overallocated',
+  }),
+  alloc_formwork_f1: createResourceAllocation({
+    id: 'alloc-formwork-f1',
+    project_id: PROJECT.id,
+    task_id: SCHEDULE_TASKS.formwork_col_F1.id,
+    trade: 'formwork',
+    headcount_required: 2,
+    headcount_available: 2,
+    date: '2025-09-02',
+    status: 'ok',
+  }),
+  alloc_concrete_f1: createResourceAllocation({
+    id: 'alloc-concrete-f1',
+    project_id: PROJECT.id,
+    task_id: SCHEDULE_TASKS.concrete_col_F1.id,
+    trade: 'concrete',
+    headcount_required: 6,
+    headcount_available: 5,
+    date: '2025-09-03',
+    status: 'overallocated',
+  }),
+};
+
+const MATERIAL_ORDERS = {
+  order_db16: createMaterialOrder({
+    id: 'mat-order-db16',
+    project_id: PROJECT.id,
+    boq_item_id: BOQ_ITEMS.rebar_col_main_F1.id,
+    supplier_id: DEMO_SUPPLIER.id,
+    material_name: 'เหล็กข้ออ้อย DB16 SD30',
+    quantity: 1200,
+    unit: 'kg',
+    order_date: '2025-08-25',
+    expected_delivery_date: '2025-08-30',
+    lead_time_days: 5,
+    status: 'ordered',
+  }),
+  order_formwork: createMaterialOrder({
+    id: 'mat-order-form',
+    project_id: PROJECT.id,
+    boq_item_id: BOQ_ITEMS.formwork_col_F1.id,
+    supplier_id: DEMO_SUPPLIER.id,
+    material_name: 'ไม้แบบหล่อ + อุปกรณ์ค้ำยัน',
+    quantity: 60,
+    unit: 'm2',
+    order_date: '2025-08-28',
+    expected_delivery_date: '2025-09-01',
+    lead_time_days: 4,
+    status: 'pending',
+  }),
+  order_pump: createMaterialOrder({
+    id: 'mat-order-pump',
+    project_id: PROJECT.id,
+    boq_item_id: BOQ_ITEMS.concrete_col_F1.id,
+    supplier_id: DEMO_SUPPLIER.id,
+    material_name: 'ปั๊มคอนกรีต / รถเท',
+    quantity: 1,
+    unit: 'lot',
+    order_date: '2025-09-02',
+    expected_delivery_date: '2025-09-03',
+    lead_time_days: 1,
+    status: 'ordered',
+  }),
+};
 
 const RESOURCE_ITEMS = {
 
@@ -907,6 +991,8 @@ export function getDemoProject() {
     weather_snapshots: WEATHER_SNAPSHOTS,
     suppliers: { main: DEMO_SUPPLIER },
     resource_items: RESOURCE_ITEMS,
+    resource_allocations: RESOURCE_ALLOCATIONS,
+    material_orders: MATERIAL_ORDERS,
     payroll: PAYROLL,
     readiness_checks: READINESS_CHECKS,
     project_config: PROJECT_CONFIG,
@@ -954,12 +1040,15 @@ export function getDemoDataByEngine(engine) {
       };
 
     case 'resource':
+    case 'resources':
       return {
         // INPUT: schedule tasks (จาก Planner)
         schedule_tasks: Object.values(SCHEDULE_TASKS),
         bbs_items: Object.values(BBS_ITEMS),
         // OUTPUT ที่ engine นี้ต้องสร้าง
         expected_resources: Object.values(RESOURCE_ITEMS),
+        expected_allocations: Object.values(RESOURCE_ALLOCATIONS),
+        expected_material_orders: Object.values(MATERIAL_ORDERS),
         expected_payroll: Object.values(PAYROLL),
         suppliers: [DEMO_SUPPLIER],
         // ค่าเริ่มต้นสำหรับ Resource Hub dashboard (ความพร้อมแรงงาน/สต็อก/เครื่องจักร)
@@ -980,7 +1069,7 @@ export function getDemoDataByEngine(engine) {
       };
 
     default:
-      throw new Error(`Unknown engine: ${engine}. Use 'drawing' | 'quantitake' | 'planner' | 'resource' | 'readiness'`);
+      throw new Error(`Unknown engine: ${engine}. Use 'drawing' | 'quantitake' | 'planner' | 'resource' | 'resources' | 'readiness'`);
   }
 }
 
