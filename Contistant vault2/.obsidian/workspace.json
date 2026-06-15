@@ -1,0 +1,203 @@
+{
+  "main": {
+    "id": "c4ff287c63e69bec",
+    "type": "split",
+    "children": [
+      {
+        "id": "4a8c1fe102cdeba1",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "e373bf829a466d59",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Clippings/ราคากลาง 2569.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "ราคากลาง 2569"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "84b5a98e946590bc",
+    "type": "split",
+    "children": [
+      {
+        "id": "1437d5eb1c656697",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "f03b6ea1fafdf683",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "bf2cf91ed402209d",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "8a2f7b331d9fe61b",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "5a685770cf63f928",
+    "type": "split",
+    "children": [
+      {
+        "id": "7f9e59ee131b778e",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "727b80d32772b051",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Clippings/ราคากลาง 2569.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for ราคากลาง 2569"
+            }
+          },
+          {
+            "id": "c718c44227b2b4bf",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Clippings/ราคากลาง 2569.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from ราคากลาง 2569"
+            }
+          },
+          {
+            "id": "915804900cdde071",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "3baba32d73c383a6",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "37036cff5a1869d3",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Clippings/ราคากลาง 2569.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of ราคากลาง 2569"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "e373bf829a466d59",
+  "lastOpenFiles": [
+    "Clippings/ช่างคิด Engineering Apps.md",
+    "Clippings/PriceLive — ราคาวัสดุก่อสร้าง · ค่าแรง.md",
+    "Clippings/คู่มือการใช้งาน Easy Planning.md",
+    "Clippings/ราคากลาง 2569.md",
+    "Clippings/โปรแกรมคำนวณค่า K งานก่อสร้าง (Escalation Factor).md",
+    "Pasted image 20260613152846.png",
+    "Welcome.md",
+    "Pasted image 20260613152938.png",
+    "Pasted image 20260613152929.png",
+    "Pasted image 20260613152919.png",
+    "Untitled",
+    "contistant vault/idk",
+    "contistant vault",
+    "Clippings"
+  ]
+}

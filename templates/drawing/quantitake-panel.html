@@ -1,0 +1,160 @@
+﻿<header>
+  <div class="logo">
+    <div class="logo-icon">📐</div>
+    <div>
+      <div class="logo-title">QuantiTake</div>
+      <div class="logo-sub">Structural Quantity Takeoff · Gemini Vision</div>
+    </div>
+  </div>
+  <div id="status-pill">
+    <div class="dot" id="status-dot" style="background:#334155"></div>
+    <span id="status-text">Ready</span>
+  </div>
+</header>
+
+<main>
+
+  <div class="phase-bar" id="phase-bar">
+    <div class="phase-step active" id="ps-1">
+      <div class="phase-num">1</div>
+      <div class="phase-label">Upload & Config</div>
+    </div>
+    <div class="phase-line" id="pl-1"></div>
+    <div class="phase-step" id="ps-2">
+      <div class="phase-num">2</div>
+      <div class="phase-label">Review & Edit</div>
+    </div>
+    <div class="phase-line" id="pl-2"></div>
+    <div class="phase-step" id="ps-3">
+      <div class="phase-num">3</div>
+      <div class="phase-label">Results</div>
+    </div>
+  </div>
+
+  <div id="phase1">
+
+    <div class="card">
+      <div class="section-label"><div class="step-num">🔑</div><span>Gemini API Key</span></div>
+      <div class="key-row">
+        <input class="key-input" type="password" id="api-key" placeholder="AIza..." autocomplete="off" spellcheck="false">
+        <button class="key-toggle" id="key-toggle" onclick="qt_toggleKey()">👁</button>
+      </div>
+      <div class="key-hint">สมัครฟรีที่ aistudio.google.com · Key ไม่ถูกบันทึก</div>
+      <details>
+        <summary>📖 วิธี Hardcode Key ตอน deploy</summary>
+        <div class="deploy-guide">
+          หา <span style="color:#10b981">const API_KEY = ""</span> แล้วใส่ key ของคุณ<br>
+          <span style="color:#64748b">⚠️ อย่า push ขึ้น GitHub public</span>
+        </div>
+      </details>
+    </div>
+
+    <div class="card">
+      <div class="section-label"><div class="step-num">1</div><span>Upload Drawing</span></div>
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
+           ondragover="qt_onDragOver(event)" ondragleave="qt_onDragLeave()" ondrop="qt_onDrop(event)">
+        <input type="file" id="file-input" accept=".pdf,image/jpeg,image/png,image/webp" onchange="qt_onFileChange(event)">
+        <div class="dz-icon" id="dz-icon">⬆️</div>
+        <div id="dz-main">
+          <div class="dz-title">Drop PDF here or click to upload</div>
+          <div class="dz-sub">PDF · JPG · PNG · WEBP</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" id="page-modal" style="display:none">
+      <div class="modal-box">
+        <div class="modal-title">🗺️ เลือกหน้าผังโครงสร้างที่ต้องการนับคาน</div>
+        <div class="modal-sub">AI พบหน้าที่อาจเป็นผังโครงสร้างหลายหน้า — กรุณา <strong style="color:var(--accent)">tick เลือกทุกหน้าที่มีคาน</strong> (ชั้นล่าง + ชั้นบน) และไม่ต้องเลือกผังฐานราก หรือผังหลังคา</div>
+        <div class="modal-hint">💡 ผังโครงสร้างคานจะมี label B1, B2... วางบนเส้น grid — ผังฐานรากจะมี F1, C1 เป็นหลัก</div>
+        <div class="page-thumb-grid" id="page-thumb-grid"></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px" id="modal-selected-count">เลือกแล้ว 0 หน้า</div>
+        <div class="modal-btns">
+          <button class="btn-secondary" onclick="qt_closePageModal(false)">ข้ามขั้นตอนนี้</button>
+          <button class="btn-green" onclick="qt_closePageModal(true)">✓ ยืนยัน</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-label"><div class="step-num">2</div><span>Structural Elements</span></div>
+        <div class="chips" id="element-chips">
+        <div class="chip" data-id="beam" onclick="qt_toggleChip(this)">━ Beam <span class="chip-sub">คาน</span></div>
+        <div class="chip" data-id="column" onclick="qt_toggleChip(this)">┃ Column <span class="chip-sub">เสา</span></div>
+        <div class="chip" data-id="slab" onclick="qt_toggleChip(this)">▬ Slab <span class="chip-sub">พื้น</span></div>
+        <div class="chip" data-id="footing" onclick="qt_toggleChip(this)">⬛ Footing <span class="chip-sub">ฐานราก</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-label"><div class="step-num">3</div><span>Special Instructions (optional)</span></div>
+      <textarea id="extra-note" rows="4" placeholder="เช่น:&#10;- B1 มีแค่ 1 section (ไม่มี 2-section), จำนวน 6 ตัว L=3.0m&#10;- B2 มี 2 sections (L/4 ปลาย, L/2 กลาง), จำนวน 4 ตัว L=6.0m&#10;- คำนวณเฉพาะ B1, B2"></textarea>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;opacity:.7">💡 ถ้า AI นับจำนวนหรือ section ผิด — ระบุตรงนี้เพื่อ override ได้เลย</div>
+    </div>
+
+    <div id="progress">
+      <div class="progress-dot"></div>
+      <span id="progress-msg">Processing…</span>
+    </div>
+
+    <button class="btn-primary" id="run-btn" onclick="qt_runRead()">🔍 Read Drawing with AI</button>
+    <div id="error-box"></div>
+
+  </div>
+
+  <div id="review-section">
+    <div class="review-header">
+      <div class="review-title">✏️ Review & Edit — ตรวจสอบค่าที่ AI อ่านได้</div>
+      <button class="btn-secondary" onclick="qt_goBack()">← แก้ไฟล์ใหม่</button>
+    </div>
+    <div class="review-hint">
+      🟡 <b>สีเหลือง</b> = AI ไม่แน่ใจ ควรตรวจสอบ · แก้ไขตัวเลขได้ทุกช่อง · กด <b>+ Add Element</b> เพื่อเพิ่มหน้าตัดที่ AI อ่านไม่ได้
+    </div>
+    <div id="el-cards-container"></div>
+    <button class="add-el-btn" onclick="qt_addElement()">+ Add Element</button>
+
+    <div class="calc-options-box">
+      <div class="calc-options-title">เลือกรายการที่ต้องการคำนวณ</div>
+      <div class="calc-chips" id="calc-chips">
+        <div class="calc-chip active active-green" data-calc="concrete" onclick="qt_toggleCalcChip(this)">
+          <span class="cc-icon">🧱</span> Volume Concrete <span class="cc-sub">m³</span>
+        </div>
+        <div class="calc-chip active active-yellow" data-calc="formwork" onclick="qt_toggleCalcChip(this)">
+          <span class="cc-icon">🪵</span> Formwork <span class="cc-sub">m²</span>
+        </div>
+        <div class="calc-chip active" data-calc="steel" onclick="qt_toggleCalcChip(this)">
+          <span class="cc-icon">🔩</span> Rebar / Steel <span class="cc-sub">kg</span>
+        </div>
+        <div class="calc-chip" data-calc="stirrup" onclick="qt_toggleCalcChip(this)">
+          <span class="cc-icon">〰️</span> Stirrup Detail <span class="cc-sub">kg</span>
+        </div>
+        <div class="calc-chip" data-calc="bar_schedule" onclick="qt_toggleCalcChip(this)">
+          <span class="cc-icon">📋</span> Bar Schedule <span class="cc-sub">ตาราง</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="review-actions" style="margin-top:20px">
+      <button class="btn-green" onclick="qt_runCalculate()">⚡ Calculate Quantities</button>
+    </div>
+  </div>
+
+  <div id="result-section">
+    <div class="result-topbar">
+      <div class="result-title-txt">📊 Quantity Takeoff Result</div>
+      <div class="result-actions">
+        <button class="save-btn" id="save-project-btn" onclick="qt_saveToProject()">💾 บันทึกเข้าโปรเจกต์</button>
+        <button class="copy-btn" id="copy-btn" onclick="qt_copyResult()">Copy Summary</button>
+        <button class="btn-secondary" onclick="qt_goReview()">← Edit Values</button>
+      </div>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-cell"><div class="s-val" id="tot-concrete">—</div><div class="s-unit">m³</div><div class="s-label">Total Concrete</div></div>
+      <div class="summary-cell"><div class="s-val" id="tot-steel">—</div><div class="s-unit">kg</div><div class="s-label">Total Steel</div><div id="steel-dia-breakdown" class="dia-breakdown" style="display:none"></div></div>
+      <div class="summary-cell"><div class="s-val" id="tot-formwork">—</div><div class="s-unit">m²</div><div class="s-label">Total Formwork</div></div>
+    </div>
+    <div class="beam-cards" id="beam-cards"></div>
+  </div>
+
+</main>
+        </div>

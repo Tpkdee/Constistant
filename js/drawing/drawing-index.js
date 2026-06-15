@@ -3,10 +3,51 @@
  * upload, Gemini, parser, and UI modules together for the page.
  */
 
-import { qt_onDragOver, qt_onDragLeave, qt_onDrop, qt_onFileChange, qt_setFile, qt_extractPdfPages, qt_showPageModal } from './drawing-upload.js';
+import { qt_onDragOver, qt_onDragLeave, qt_onDrop, qt_onFileChange, qt_setFile, qt_extractPdfPages, qt_showPageModal, qt_closePageModal } from './drawing-upload.js';
 import { qt_callGeminiParts } from './drawing-gemini.js';
 import { qt_normalizeGeminiResponse } from './drawing-parser.js';
-import { qt_renderReview, qt_setStatus, qt_setProgress, qt_showError, qt_hideError, qt_setPhase } from './drawing-ui.js';
+import { qt_renderReview, qt_setStatus, qt_setProgress, qt_showError, qt_hideError, qt_setPhase, qt_goBack, qt_goReview, qt_getActiveChips, qt_toggleChip, qt_toggleCalcChip, qt_getCalcOptions, qt_updateField, qt_setStirrupType, qt_setSecStirrupType, qt_addLengthGroup, qt_removeLengthGroup, qt_addSection, qt_deleteElement, qt_addElement } from './drawing-ui.js';
+import { qt_initSteelGlobals, qt_runCalculate, qt_copyResult } from './drawing-calc.js';
+import { qt_saveExtractionToProject } from './drawing-bridge.js';
+import { createDrawingUpload } from '../shared/schema.js';
+import { runPipeline, STORAGE_KEYS } from '../shared/pipeline.js';
+import { getCurrentProjectId, projectStorageKey } from '../shared/project-store.js';
+
+async function qt_mountPanel() {
+  const mount = document.getElementById('qt-module');
+  if (!mount || mount.dataset.mounted === '1') return;
+  try {
+    const url = new URL('../../templates/drawing/quantitake-panel.html', import.meta.url);
+    mount.innerHTML = await (await fetch(url)).text();
+    mount.dataset.mounted = '1';
+  } catch (e) {
+    console.error('[drawing] failed to load quantitake panel', e);
+    return;
+  }
+  qt_wirePanelEvents();
+  qt_setPhase(1);
+}
+
+function qt_wirePanelEvents() {
+  const fileInput = document.getElementById('file-input');
+  if (fileInput) fileInput.addEventListener('change', (e) => qt_onFileChange(e));
+  const dropZone = document.getElementById('drop-zone');
+  if (dropZone) {
+    dropZone.addEventListener('dragover', qt_onDragOver);
+    dropZone.addEventListener('dragleave', qt_onDragLeave);
+    dropZone.addEventListener('drop', qt_onDrop);
+  }
+  const runBtn = document.getElementById('run-btn');
+  if (runBtn) runBtn.addEventListener('click', () => qt_runRead());
+  const keyToggle = document.getElementById('key-toggle');
+  if (keyToggle) {
+    keyToggle.addEventListener('click', () => {
+      const input = document.getElementById('api-key');
+      input.type = input.type === 'password' ? 'text' : 'password';
+      keyToggle.textContent = input.type === 'password' ? '👁' : '🙈';
+    });
+  }
+}
 
 export async function qt_runRead() {
   const key = (globalThis.qt_API_KEY || document.getElementById('api-key').value).trim();
@@ -114,6 +155,79 @@ export async function qt_runRead() {
   }
 }
 
+/**
+ * บันทึกผลอ่านแบบ (qt_elementsData) เข้าโปรเจกต์ปัจจุบัน — สร้าง beam_library +
+ * drawing_elements ผ่าน drawing-bridge.js, บันทึก drawing_upload record (ให้ขึ้นใน
+ * sidebar) แล้วรัน pipeline ใหม่ทั้งหมด (BOQ/BBS/Planner/Resource/Readiness)
+ */
+export async function qt_saveToProject() {
+  const elementsData = globalThis.qt_elementsData || [];
+  if (!elementsData.length) { qt_showError('ไม่มีผลการอ่านแบบให้บันทึก'); return; }
+
+  const btn = document.getElementById('save-project-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...'; btn.classList.remove('saved'); }
+  qt_hideError();
+
+  try {
+    const projectId = getCurrentProjectId();
+    qt_saveExtractionToProject(projectId, { floorLevel: 'F1' });
+
+    const uploadsKey = projectStorageKey(STORAGE_KEYS.drawingUploads, projectId);
+    let uploads = [];
+    try {
+      const raw = localStorage.getItem(uploadsKey);
+      if (raw) uploads = JSON.parse(raw);
+      if (!Array.isArray(uploads)) uploads = [];
+    } catch (e) { uploads = []; }
+    uploads.unshift(createDrawingUpload({
+      id: crypto.randomUUID(),
+      project_id: projectId,
+      file_name: globalThis.qt_selectedFile?.name || 'Drawing Intelligence',
+      drawing_type: 'section_detail',
+      page_count: globalThis.qt_pdfPageDataUrls?.length || 1,
+      extraction_status: 'done',
+      sheet_type: 'section_detail',
+      sheet_confidence: null,
+      created_at: new Date().toISOString(),
+    }));
+    localStorage.setItem(uploadsKey, JSON.stringify(uploads));
+
+    await runPipeline();
+
+    if (btn) { btn.textContent = '✓ บันทึกแล้ว'; btn.classList.add('saved'); }
+  } catch (err) {
+    qt_showError(`บันทึกเข้าโปรเจกต์ไม่สำเร็จ: ${err.message}`);
+    if (btn) btn.textContent = '💾 บันทึกเข้าโปรเจกต์';
+  } finally {
+    if (btn) {
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = '💾 บันทึกเข้าโปรเจกต์';
+        btn.classList.remove('saved');
+      }, 2500);
+    }
+  }
+}
+
+export function qt_toggleKey() {
+  const input = document.getElementById('api-key');
+  if (!input) return;
+  input.type = input.type === 'password' ? 'text' : 'password';
+  const btn = document.getElementById('key-toggle');
+  if (btn) btn.textContent = input.type === 'password' ? '👁' : '🙈';
+}
+
+window.qt_runRead = qt_runRead;
+window.qt_onFileChange = qt_onFileChange;
+window.qt_onDrop = qt_onDrop;
+window.qt_onDragOver = qt_onDragOver;
+window.qt_onDragLeave = qt_onDragLeave;
+window.qt_setFile = qt_setFile;
+window.qt_extractPdfPages = qt_extractPdfPages;
+window.qt_showPageModal = qt_showPageModal;
+window.qt_closePageModal = qt_closePageModal;
+window.qt_toggleKey = qt_toggleKey;
+
 globalThis.qt_runRead = qt_runRead;
 globalThis.qt_onFileChange = qt_onFileChange;
 globalThis.qt_onDrop = qt_onDrop;
@@ -122,18 +236,55 @@ globalThis.qt_onDragLeave = qt_onDragLeave;
 globalThis.qt_setFile = qt_setFile;
 globalThis.qt_extractPdfPages = qt_extractPdfPages;
 globalThis.qt_showPageModal = qt_showPageModal;
+globalThis.qt_closePageModal = qt_closePageModal;
+globalThis.qt_toggleKey = qt_toggleKey;
+window.qt_setPhase = qt_setPhase;
+window.qt_goBack = qt_goBack;
+window.qt_goReview = qt_goReview;
+window.qt_setStatus = qt_setStatus;
+window.qt_showError = qt_showError;
+window.qt_hideError = qt_hideError;
+window.qt_setProgress = qt_setProgress;
+window.qt_getActiveChips = qt_getActiveChips;
+window.qt_toggleChip = qt_toggleChip;
+window.qt_toggleCalcChip = qt_toggleCalcChip;
+window.qt_getCalcOptions = qt_getCalcOptions;
+window.qt_renderReview = qt_renderReview;
+window.qt_updateField = qt_updateField;
+window.qt_setStirrupType = qt_setStirrupType;
+window.qt_setSecStirrupType = qt_setSecStirrupType;
+window.qt_addLengthGroup = qt_addLengthGroup;
+window.qt_removeLengthGroup = qt_removeLengthGroup;
+window.qt_addSection = qt_addSection;
+window.qt_deleteElement = qt_deleteElement;
+window.qt_addElement = qt_addElement;
+window.qt_runCalculate = qt_runCalculate;
+window.qt_copyResult = qt_copyResult;
+window.qt_saveToProject = qt_saveToProject;
 
-if (typeof document !== 'undefined') {
-  const fileInput = document.getElementById('file-input');
-  if (fileInput) fileInput.addEventListener('change', (e) => qt_onFileChange(e));
-  const dropZone = document.getElementById('drop-zone');
-  if (dropZone) {
-    dropZone.addEventListener('dragover', qt_onDragOver);
-    dropZone.addEventListener('dragleave', qt_onDragLeave);
-    dropZone.addEventListener('drop', qt_onDrop);
-  }
-  const runBtn = document.getElementById('run-btn');
-  if (runBtn) runBtn.addEventListener('click', () => qt_runRead());
-  const keyToggle = document.getElementById('key-toggle');
-  if (keyToggle) keyToggle.addEventListener('click', () => { const i = document.getElementById('api-key'); i.type = i.type === 'password' ? 'text' : 'password'; keyToggle.textContent = i.type === 'password' ? '👁' : '🙈'; });
-}
+globalThis.qt_setPhase = qt_setPhase;
+globalThis.qt_goBack = qt_goBack;
+globalThis.qt_goReview = qt_goReview;
+globalThis.qt_setStatus = qt_setStatus;
+globalThis.qt_showError = qt_showError;
+globalThis.qt_hideError = qt_hideError;
+globalThis.qt_setProgress = qt_setProgress;
+globalThis.qt_getActiveChips = qt_getActiveChips;
+globalThis.qt_toggleChip = qt_toggleChip;
+globalThis.qt_toggleCalcChip = qt_toggleCalcChip;
+globalThis.qt_getCalcOptions = qt_getCalcOptions;
+globalThis.qt_renderReview = qt_renderReview;
+globalThis.qt_updateField = qt_updateField;
+globalThis.qt_setStirrupType = qt_setStirrupType;
+globalThis.qt_setSecStirrupType = qt_setSecStirrupType;
+globalThis.qt_addLengthGroup = qt_addLengthGroup;
+globalThis.qt_removeLengthGroup = qt_removeLengthGroup;
+globalThis.qt_addSection = qt_addSection;
+globalThis.qt_deleteElement = qt_deleteElement;
+globalThis.qt_addElement = qt_addElement;
+globalThis.qt_runCalculate = qt_runCalculate;
+globalThis.qt_copyResult = qt_copyResult;
+globalThis.qt_saveToProject = qt_saveToProject;
+
+qt_initSteelGlobals();
+await qt_mountPanel();
